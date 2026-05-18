@@ -1,0 +1,16 @@
+[server]
+debug = true
+
+[database]
+path = "data/test/percept-virtual.db"
+
+[storage]
+base_path = "data/test/collections-virtual"
+
+[cloud]
+base_url = "http://127.0.0.1:8989/embodied_api"
+timeout = 30
+
+[upload]
+remote_host = "192.168.21.138"
+remote_path = "/mnt/nas-200t-hdd/collection_data_test/robot-virtual"

@@ -1,0 +1,28 @@
+[upload]
+remote_user = "root"
+remote_port = 58320
+ssh_key_path = "/home/dexforce/.ssh/id_rsa"
+
+[desktop.runtime]
+uv_bin = "/home/dexforce/.local/bin/uv"
+ros_env_cwd = ""
+ros_setup_script = ""
+roscore_cmd = ""
+ros_slave_cmd = ""
+ros_master_cmd = ""
+robot_os_cwd = "/home/dexforce/workspaces/percept-edge/ontology-core"
+robot_os_cmd = "/usr/bin/python3.10 /home/dexforce/workspaces/percept-edge/ontology-core/robot_os.pyz core --log-level INFO"
+api_cwd = "/home/dexforce/workspaces/percept-edge/percept-edge-api"
+api_cmd = "uv run main.py"
+api_startup_timeout = 15.0
+api_gate_interval = 1.0
+status_poll_interval = 0.2
+runtime_health_interval = 300.0
+ros_startup_grace = 3.0
+roscore_startup_grace = 2.0
+process_shutdown_grace = 5.0
+ros_shutdown_grace = 10.0
+force_kill_grace = 2.0
+ready_timeout = 30.0
+monitor_timeout = 0.5
+probe_interval = 1.0

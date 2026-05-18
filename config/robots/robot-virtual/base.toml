@@ -1,0 +1,16 @@
+[collection]
+video_only = true
+
+[upload]
+remote_user = "root"
+remote_port = 58320
+ssh_key_path = "/home/dexforce/.ssh/id_rsa"
+
+[desktop.runtime]
+ros_env_cwd = ""
+ros_setup_script = ""
+roscore_cmd = ""
+ros_slave_cmd = ""
+ros_master_cmd = ""
+robot_os_cwd = ""
+robot_os_cmd = ""

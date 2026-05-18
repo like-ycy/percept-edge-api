@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>进程监控面板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0A0A0F;
+            --surface: #111118;
+            --surface-2: #16161F;
+            --surface-3: #1C1C26;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-strong: rgba(255, 255, 255, 0.10);
+            --text: #E4E4E7;
+            --text-2: #A1A1AA;
+            --text-3: #71717A;
+            --accent: #38BDF8;
+            --accent-2: #0EA5E9;
+            --accent-soft: rgba(56, 189, 248, 0.10);
+            --green: #10B981;
+            --green-soft: rgba(16, 185, 129, 0.12);
+            --amber: #F59E0B;
+            --amber-soft: rgba(245, 158, 11, 0.12);
+            --red: #EF4444;
+            --red-soft: rgba(239, 68, 68, 0.12);
+            --radius-sm: 8px;
+            --radius: 10px;
+            --radius-lg: 14px;
+            --shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 32px 24px 64px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(60% 50% at 50% -10%, rgba(56, 189, 248, 0.06), transparent 70%),
+                radial-gradient(40% 40% at 100% 100%, rgba(168, 85, 247, 0.04), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            max-width: 1400px;
+            margin: 0 auto;
+            z-index: 1;
+        }
+
+        .header {
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header .brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            display: grid;
+            place-items: center;
+            color: #0A0A0F;
+            box-shadow: 0 8px 24px -8px rgba(56, 189, 248, 0.5);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .header .meta {
+            font-size: 12px;
+            color: var(--text-3);
+            margin-top: 2px;
+        }
+
+        .header .meta code {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            padding: 2px 6px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--accent);
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 12px;
+            color: var(--text-2);
+            flex-wrap: wrap;
+        }
+
+        .status-bar strong {
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .badge-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 500;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-2);
+        }
+
+        .badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+        }
+
+        .badge.cache .dot { background: var(--amber); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+        .badge.error .dot { background: var(--red); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: background 150ms ease, border-color 150ms ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.16); }
+        .btn:active { background: var(--surface-3); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+        .btn.primary {
+            background: var(--accent);
+            color: #0A0A0F;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+        .btn svg { width: 14px; height: 14px; }
+
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-2);
+            font-size: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            padding: 7px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle input {
+            appearance: none;
+            width: 28px;
+            height: 16px;
+            background: var(--surface-3);
+            border-radius: 999px;
+            position: relative;
+            cursor: pointer;
+            transition: background 150ms ease;
+        }
+        .toggle input::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-2);
+            transition: transform 150ms ease, background 150ms ease;
+        }
+        .toggle input:checked { background: var(--accent); }
+        .toggle input:checked::after { transform: translateX(12px); background: #0A0A0F; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-3);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .card .value {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em;
+        }
+
+        .card .sub {
+            font-size: 11px;
+            color: var(--text-3);
+            margin-top: 4px;
+            font-family: var(--font-mono);
+        }
+
+        .bar-track {
+            margin-top: 10px;
+            background: var(--surface-3);
+            border-radius: 999px;
+            height: 4px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            border-radius: 999px;
+            transition: width 400ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .bar-fill.warn { background: linear-gradient(90deg, var(--amber), #FB923C); }
+        .bar-fill.crit { background: linear-gradient(90deg, var(--red), #F87171); }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .panel h2 {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-2);
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel h2 .count {
+            color: var(--text-3);
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .cpu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+            gap: 8px;
+        }
+
+        .cpu-cell {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 8px;
+            text-align: center;
+            transition: border-color 150ms ease;
+        }
+        .cpu-cell:hover { border-color: var(--border-strong); }
+
+        .cpu-cell .num {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            color: var(--text-3);
+            font-size: 11px;
+            letter-spacing: 0.02em;
+        }
+        .cpu-cell .pct {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+            margin-top: 2px;
+            font-weight: 500;
+        }
+        .cpu-cell .bar-track { margin-top: 6px; height: 3px; }
+
+        .table-wrap {
+            overflow-x: auto;
+            margin: 0 -20px -20px;
+            padding: 0 20px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+
+        thead th {
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-3);
+            font-weight: 500;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            background: var(--surface);
+        }
+
+        tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            color: var(--text);
+            vertical-align: middle;
+        }
+
+        tbody tr { transition: background 100ms ease; }
+        tbody tr:hover { background: var(--surface-2); }
+        tbody tr.main { background: rgba(56, 189, 248, 0.04); }
+        tbody tr.main:hover { background: rgba(56, 189, 248, 0.08); }
+        tbody tr:last-child td { border-bottom: none; }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: var(--font-sans);
+            background: var(--surface-3);
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+        .pill.main {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+        .pill.running { background: var(--green-soft); color: var(--green); border-color: rgba(16, 185, 129, 0.25); }
+        .pill.sleeping { background: var(--surface-3); color: var(--text-3); }
+        .pill.zombie { background: var(--red-soft); color: var(--red); border-color: rgba(239, 68, 68, 0.25); }
+
+        .cmdline {
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+            color: var(--text-2);
+            max-width: 380px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .error-box {
+            background: var(--red-soft);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #FCA5A5;
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .error-box svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+        .empty {
+            text-align: center;
+            color: var(--text-3);
+            padding: 48px 0;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 20px 16px 48px; }
+            .cmdline { max-width: 140px; }
+            .card .value { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </div>
+            <div>
+                <h1>进程监控面板</h1>
+                <div class="meta">主进程及递归子进程指标 · 数据源 <code>GET /debug/processes</code></div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span>采样时间 <strong id="sampled-at">—</strong></span>
+            <div class="badge-group">
+                <span class="badge" id="source-badge"><span class="dot"></span><span id="source-text">—</span></span>
+                <span class="badge" id="platform-badge"><span class="dot"></span><span id="platform-text">—</span></span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="btn-snapshot">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                读取快照
+            </button>
+            <button class="btn primary" id="btn-refresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                实时刷新
+            </button>
+            <label class="toggle">
+                <input type="checkbox" id="auto-toggle">
+                自动 5s 刷新
+            </label>
+        </div>
+
+        <div id="error-area"></div>
+
+        <div class="grid" id="overview-grid"></div>
+
+        <div class="panel">
+            <h2>各 CPU 核心使用率</h2>
+            <div class="cpu-grid" id="cpu-grid"><div class="empty">暂无数据</div></div>
+        </div>
+
+        <div class="panel">
+            <h2>进程列表 <span class="count" id="proc-count"></span></h2>
+            <div class="table-wrap">
+                <table id="proc-table">
+                    <thead>
+                        <tr>
+                            <th>PID</th>
+                            <th>父 PID</th>
+                            <th>名称</th>
+                            <th>状态</th>
+                            <th>CPU %</th>
+                            <th>核心</th>
+                            <th>亲和性</th>
+                            <th>线程</th>
+                            <th>RSS (MB)</th>
+                            <th>内存 %</th>
+                            <th>FD</th>
+                            <th>创建时间</th>
+                            <th>命令行</th>
+                        </tr>
+                    </thead>
+                    <tbody id="proc-body">
+                        <tr><td colspan="13" class="empty">点击上方按钮加载</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        const els = {
+            sampledAt: document.getElementById('sampled-at'),
+            sourceBadge: document.getElementById('source-badge'),
+            sourceText: document.getElementById('source-text'),
+            platformBadge: document.getElementById('platform-badge'),
+            platformText: document.getElementById('platform-text'),
+            overview: document.getElementById('overview-grid'),
+            cpuGrid: document.getElementById('cpu-grid'),
+            procBody: document.getElementById('proc-body'),
+            procCount: document.getElementById('proc-count'),
+            errorArea: document.getElementById('error-area'),
+            btnSnapshot: document.getElementById('btn-snapshot'),
+            btnRefresh: document.getElementById('btn-refresh'),
+            autoToggle: document.getElementById('auto-toggle'),
+        };
+
+        let autoTimer = null;
+
+        function fmtNum(n, digits = 1) {
+            if (n === null || n === undefined || Number.isNaN(n)) return '—';
+            return Number(n).toFixed(digits);
+        }
+
+        function fmtMB(mb) {
+            if (mb === null || mb === undefined) return '—';
+            if (mb >= 1024) return (mb / 1024).toFixed(2) + ' GB';
+            return mb.toFixed(1);
+        }
+
+        function fmtTime(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return iso;
+            return d.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function pctClass(pct) {
+            if (pct >= 85) return 'crit';
+            if (pct >= 60) return 'warn';
+            return '';
+        }
+
+        function statusClass(s) {
+            const v = (s || '').toLowerCase();
+            if (v.includes('run')) return 'running';
+            if (v.includes('zombie') || v.includes('dead')) return 'zombie';
+            return 'sleeping';
+        }
+
+        function showError(msg) {
+            els.errorArea.innerHTML = `
+                <div class="error-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>${msg}</span>
+                </div>`;
+        }
+        function clearError() { els.errorArea.innerHTML = ''; }
+
+        function renderOverview(sys, mainPid) {
+            const cards = [
+                { label: '主进程 PID', value: mainPid ?? '—' },
+                { label: '逻辑 / 物理核心', value: `${sys.cpu_count_logical} / ${sys.cpu_count_physical}` },
+                {
+                    label: '内存使用率',
+                    value: fmtNum(sys.memory_percent) + ' %',
+                    sub: `${fmtMB(sys.memory_used_mb)} / ${fmtMB(sys.memory_total_mb)} MB`,
+                    bar: sys.memory_percent,
+                },
+                {
+                    label: '系统平均负载',
+                    value: sys.load_avg_1_5_15.map(x => fmtNum(x, 2)).join(' / '),
+                    sub: '1m / 5m / 15m',
+                },
+                { label: '平台', value: sys.platform },
+            ];
+            els.overview.innerHTML = cards.map(c => `
+                <div class="card">
+                    <div class="label">${c.label}</div>
+                    <div class="value">${c.value}</div>
+                    ${c.sub ? `<div class="sub">${c.sub}</div>` : ''}
+                    ${c.bar !== undefined ? `<div class="bar-track"><div class="bar-fill ${pctClass(c.bar)}" style="width:${Math.min(100, c.bar)}%"></div></div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function renderCpu(perCpu) {
+            if (!perCpu || perCpu.length === 0) {
+                els.cpuGrid.innerHTML = '<div class="empty">无数据</div>';
+                return;
+            }
+            els.cpuGrid.innerHTML = perCpu.map((p, i) => `
+                <div class="cpu-cell">
+                    <div class="num">CPU${i}</div>
+                    <div class="pct">${fmtNum(p)}%</div>
+                    <div class="bar-track"><div class="bar-fill ${pctClass(p)}" style="width:${Math.min(100, p)}%"></div></div>
+                </div>
+            `).join('');
+        }
+
+        function renderProcs(procs, mainPid) {
+            els.procCount.textContent = `（共 ${procs.length} 个）`;
+            if (procs.length === 0) {
+                els.procBody.innerHTML = '<tr><td colspan="13" class="empty">无数据</td></tr>';
+                return;
+            }
+            els.procBody.innerHTML = procs.map(p => {
+                const isMain = p.pid === mainPid;
+                const stCls = statusClass(p.status);
+                const aff = p.cpu_affinity && p.cpu_affinity.length
+                    ? (p.cpu_affinity.length > 6 ? p.cpu_affinity.slice(0, 6).join(',') + '…' : p.cpu_affinity.join(','))
+                    : '—';
+                return `
+                    <tr class="${isMain ? 'main' : ''}">
+                        <td><span class="pill ${isMain ? 'main' : ''}">${p.pid}</span></td>
+                        <td>${p.parent_pid ?? '—'}</td>
+                        <td>${escapeHtml(p.name)}</td>
+                        <td><span class="pill ${stCls}">${escapeHtml(p.status)}</span></td>
+                        <td>${fmtNum(p.cpu_percent)}</td>
+                        <td>${p.cpu_num ?? '—'}</td>
+                        <td title="${p.cpu_affinity ? p.cpu_affinity.join(',') : ''}">${aff}</td>
+                        <td>${p.num_threads}</td>
+                        <td>${fmtMB(p.memory_rss_mb)}</td>
+                        <td>${fmtNum(p.memory_percent, 2)}</td>
+                        <td>${p.num_fds ?? '—'}</td>
+                        <td>${fmtTime(p.create_time)}</td>
+                        <td class="cmdline" title="${escapeHtml(p.cmdline)}">${escapeHtml(p.cmdline) || '—'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function load(refresh) {
+            const url = `${API_BASE}/debug/processes${refresh ? '?refresh=true' : ''}`;
+            els.btnSnapshot.disabled = true;
+            els.btnRefresh.disabled = true;
+            try {
+                const resp = await fetch(url, { cache: 'no-store' });
+                const body = await resp.json();
+                if (!resp.ok || body.code !== 200) {
+                    throw new Error(body.message || `HTTP ${resp.status}`);
+                }
+                clearError();
+                const data = body.data;
+                els.sampledAt.textContent = fmtTime(data.sampled_at);
+                els.sourceBadge.className = 'badge' + (data.from_cache ? ' cache' : '');
+                els.sourceText.textContent = data.from_cache ? '快照缓存' : '实时采样';
+                els.platformBadge.className = 'badge';
+                els.platformText.textContent = data.system.platform;
+
+                renderOverview(data.system, data.main_pid);
+                renderCpu(data.system.per_cpu_percent);
+                renderProcs(data.processes, data.main_pid);
+            } catch (e) {
+                els.sourceBadge.className = 'badge error';
+                els.sourceText.textContent = '请求失败';
+                showError(e.message || String(e));
+            } finally {
+                els.btnSnapshot.disabled = false;
+                els.btnRefresh.disabled = false;
+            }
+        }
+
+        els.btnSnapshot.addEventListener('click', () => load(false));
+        els.btnRefresh.addEventListener('click', () => load(true));
+        els.autoToggle.addEventListener('change', e => {
+            if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+            if (e.target.checked) {
+                load(false);
+                autoTimer = setInterval(() => load(false), 5000);
+            }
+        });
+
+        load(false);
+    </script>
+</body>
+</html>

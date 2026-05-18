@@ -1,0 +1,16 @@
+[server]
+debug = true
+
+[database]
+path = "/home/dexforce/workspaces/percept-edge/percept-edge-api-test/data/test/percept.db"
+
+[storage]
+base_path = "/home/dexforce/workspaces/percept-edge/percept-edge-api-test/data/test/collections"
+
+[cloud]
+base_url = "http://192.168.21.138:8989/embodied_api"
+timeout = 30
+
+[upload]
+remote_host = "192.168.21.138"
+remote_path = "/mnt/nas-200t-hdd/collection_data_test/W1"

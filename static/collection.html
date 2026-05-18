@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据采集测试</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0A0A0F;
+            --surface: #111118;
+            --surface-2: #16161F;
+            --surface-3: #1C1C26;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-strong: rgba(255, 255, 255, 0.10);
+            --text: #E4E4E7;
+            --text-2: #A1A1AA;
+            --text-3: #71717A;
+            --accent: #38BDF8;
+            --accent-2: #0EA5E9;
+            --accent-soft: rgba(56, 189, 248, 0.10);
+            --green: #10B981;
+            --green-soft: rgba(16, 185, 129, 0.12);
+            --amber: #F59E0B;
+            --amber-soft: rgba(245, 158, 11, 0.12);
+            --red: #EF4444;
+            --red-soft: rgba(239, 68, 68, 0.12);
+            --radius-sm: 8px;
+            --radius: 10px;
+            --radius-lg: 14px;
+            --shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 32px 24px 64px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(60% 50% at 50% -10%, rgba(56, 189, 248, 0.06), transparent 70%),
+                radial-gradient(40% 40% at 100% 100%, rgba(168, 85, 247, 0.04), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            max-width: 1400px;
+            margin: 0 auto;
+            z-index: 1;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            display: grid;
+            place-items: center;
+            color: #0A0A0F;
+            box-shadow: 0 8px 24px -8px rgba(56, 189, 248, 0.5);
+        }
+
+        .brand h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .brand .subtitle {
+            font-size: 12px;
+            color: var(--text-3);
+            margin-top: 2px;
+        }
+
+        .auth-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 8px 8px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 12px;
+            color: var(--text-2);
+            flex-wrap: wrap;
+        }
+
+        .auth-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .auth-status::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 0 3px currentColor;
+            opacity: 0.4;
+        }
+
+        .auth-status.saved { color: var(--green); }
+        .auth-status.empty { color: var(--red); }
+
+        #authToken {
+            display: none;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: background 150ms ease, border-color 150ms ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.16); }
+        .btn:active { background: var(--surface-3); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+        .btn.primary {
+            background: var(--accent);
+            color: #0A0A0F;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+        .btn.danger {
+            background: transparent;
+            color: var(--red);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        .btn.danger:hover { background: var(--red-soft); border-color: var(--red); }
+
+        .btn.small { padding: 6px 12px; font-size: 12px; }
+
+        .btn svg { width: 14px; height: 14px; }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .video-container {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: border-color 150ms ease;
+        }
+
+        .video-container:hover { border-color: var(--border-strong); }
+
+        .video-header {
+            background: var(--surface-2);
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .camera-name {
+            color: var(--text);
+            font-weight: 500;
+            font-size: 13px;
+            font-family: var(--font-mono);
+            letter-spacing: -0.01em;
+        }
+
+        .camera-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: var(--surface-3);
+            color: var(--text-3);
+        }
+
+        .camera-status::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 0 3px currentColor;
+            opacity: 0.4;
+        }
+
+        .camera-status.connected { background: var(--green-soft); color: var(--green); }
+        .camera-status.error { background: var(--red-soft); color: var(--red); }
+
+        .video-wrapper {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #000;
+            position: relative;
+        }
+
+        .video-wrapper video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .no-cameras {
+            text-align: center;
+            padding: 64px 24px;
+            color: var(--text-3);
+            font-size: 14px;
+            grid-column: 1 / -1;
+            background: var(--surface);
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius-lg);
+        }
+
+        .control-panel {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 14px 18px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+        }
+
+        .task-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-2);
+        }
+
+        .task-input input {
+            width: 110px;
+            padding: 7px 10px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            transition: border-color 150ms ease;
+        }
+
+        .task-input input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-2);
+        }
+
+        .status-pill .status-label { color: var(--text-3); }
+
+        .status-value {
+            color: var(--text);
+            font-weight: 500;
+            font-family: var(--font-mono);
+        }
+        .status-value.collecting { color: var(--green); }
+        .status-value.error { color: var(--red); }
+
+        .status-value::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--text-3);
+            margin-right: 6px;
+            vertical-align: 2px;
+        }
+        .status-value.collecting::before { background: var(--green); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25); animation: pulse 1.5s ease-in-out infinite; }
+        .status-value.error::before { background: var(--red); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .controls-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .log-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .log-header {
+            padding: 10px 14px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 500;
+        }
+
+        .log {
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 10px 14px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.7;
+        }
+
+        .log::-webkit-scrollbar { width: 8px; }
+        .log::-webkit-scrollbar-track { background: transparent; }
+        .log::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+        .log::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+        .log-entry { color: var(--text-2); padding: 1px 0; }
+        .log-entry.error { color: #FCA5A5; }
+        .log-entry.success { color: #6EE7B7; }
+        .log-entry.info { color: var(--accent); }
+
+        /* Login modal */
+        .login-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .login-modal.show { display: flex; }
+
+        .login-box {
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: var(--shadow-lg);
+            animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modal-in {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .login-box h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 20px;
+        }
+
+        .login-box h2 svg { width: 18px; height: 18px; color: var(--accent); }
+
+        .form-group { margin-bottom: 14px; }
+
+        .form-group label {
+            display: block;
+            color: var(--text-2);
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            font-family: inherit;
+            font-size: 13px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            transition: border-color 150ms ease, background 150ms ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: var(--surface-3);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-group .btn { flex: 1; padding: 10px 14px; }
+
+        .login-error {
+            color: var(--red);
+            font-size: 12px;
+            margin-top: 12px;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        @media (max-width: 800px) {
+            body { padding: 20px 16px 48px; }
+            .video-grid { grid-template-columns: 1fr; }
+            .control-panel { grid-template-columns: 1fr; }
+            .controls-actions { justify-content: stretch; }
+            .controls-actions .btn { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-modal" id="loginModal">
+        <div class="login-box">
+            <h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                登录
+            </h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" value="robot_wx" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" value="wx@123" required autocomplete="current-password">
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <div class="btn-group">
+                    <button type="submit" class="btn primary">登录</button>
+                    <button type="button" class="btn" id="cancelLoginBtn">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                </div>
+                <div>
+                    <h1>数据采集测试</h1>
+                    <div class="subtitle">实时预览 · WebRTC 多路传输</div>
+                </div>
+            </div>
+            <div class="auth-bar">
+                <input type="text" id="authToken" readonly>
+                <span id="authStatus" class="auth-status empty">未登录</span>
+                <button id="loginBtn" class="btn small">登录</button>
+                <button id="logoutBtn" class="btn small">退出</button>
+            </div>
+        </div>
+
+        <div class="video-grid" id="videoGrid">
+            <div class="no-cameras">正在加载摄像头列表…</div>
+        </div>
+
+        <div class="control-panel">
+            <div class="task-input">
+                <label for="taskId">任务 ID</label>
+                <input type="number" id="taskId" value="1" min="1">
+                <span class="status-pill">
+                    <span class="status-label">状态</span>
+                    <span id="statusValue" class="status-value">未连接</span>
+                </span>
+            </div>
+            <div class="controls-actions">
+                <button id="startBtn" class="btn primary">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    开始采集
+                </button>
+                <button id="stopBtn" class="btn danger" disabled>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                    停止采集
+                </button>
+            </div>
+        </div>
+
+        <div class="log-panel">
+            <div class="log-header">运行日志</div>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        const videoGrid = document.getElementById('videoGrid');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusValue = document.getElementById('statusValue');
+        const taskIdInput = document.getElementById('taskId');
+        const logDiv = document.getElementById('log');
+        const authTokenInput = document.getElementById('authToken');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const authStatus = document.getElementById('authStatus');
+        const loginModal = document.getElementById('loginModal');
+        const loginForm = document.getElementById('loginForm');
+        const cancelLoginBtn = document.getElementById('cancelLoginBtn');
+        const loginError = document.getElementById('loginError');
+
+        const cameraConnections = new Map();
+        let isCollecting = false;
+        let isStopping = false;
+
+        let globalAuthToken = localStorage.getItem('authToken') || '';
+        let currentUser = localStorage.getItem('username') || '';
+
+        function initAuthToken() {
+            if (globalAuthToken) {
+                authTokenInput.value = globalAuthToken.substring(0, 20) + '...';
+                authStatus.textContent = `已登录 · ${currentUser}`;
+                authStatus.className = 'auth-status saved';
+                logoutBtn.style.display = 'inline-flex';
+                loginBtn.style.display = 'none';
+            } else {
+                authStatus.textContent = '未登录';
+                authStatus.className = 'auth-status empty';
+                logoutBtn.style.display = 'none';
+                loginBtn.style.display = 'inline-flex';
+                showLoginModal();
+            }
+        }
+
+        function showLoginModal() {
+            loginModal.classList.add('show');
+            loginError.textContent = '';
+        }
+
+        function hideLoginModal() {
+            loginModal.classList.remove('show');
+        }
+
+        async function login(username, password) {
+            try {
+                const response = await fetch('http://192.168.21.138:8989/embodied_api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.code === 200 && result.data && result.data.token) {
+                    globalAuthToken = result.data.token;
+                    currentUser = result.data.username;
+                    localStorage.setItem('authToken', globalAuthToken);
+                    localStorage.setItem('username', currentUser);
+
+                    hideLoginModal();
+                    initAuthToken();
+                    log('登录成功', 'success');
+
+                    initCameraPreviews();
+                    checkStatus();
+                } else {
+                    loginError.textContent = result.msg || '登录失败';
+                }
+            } catch (error) {
+                loginError.textContent = `登录失败: ${error.message}`;
+            }
+        }
+
+        function logout() {
+            globalAuthToken = '';
+            currentUser = '';
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+
+            closeAllConnections();
+            videoGrid.innerHTML = '<div class="no-cameras">请先登录</div>';
+
+            initAuthToken();
+            log('已退出登录', 'info');
+        }
+
+        async function authFetch(url, options = {}) {
+            const headers = options.headers || {};
+            if (globalAuthToken) {
+                headers['Authorization'] = `Bearer ${globalAuthToken}`;
+            }
+            return fetch(url, { ...options, headers });
+        }
+
+        function log(msg, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(status, className = '') {
+            statusValue.textContent = status;
+            statusValue.className = `status-value ${className}`;
+        }
+
+        function setCollectionControls({ collecting = false, stopping = false } = {}) {
+            isCollecting = collecting;
+            isStopping = stopping;
+            startBtn.disabled = collecting || stopping;
+            stopBtn.disabled = !collecting || stopping;
+            stopBtn.innerHTML = stopping
+                ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> 正在保存…'
+                : '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> 停止采集';
+        }
+
+        async function pollCollectionStatusUntilSettled() {
+            const maxAttempts = 30;
+
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                try {
+                    const resp = await authFetch('/api/collection/status');
+                    if (!resp.ok) {
+                        throw new Error(`HTTP ${resp.status}`);
+                    }
+
+                    const result = await resp.json();
+                    const session = result?.data;
+                    const status = session?.status;
+
+                    if (!status) {
+                        setCollectionControls({ collecting: false, stopping: false });
+                        updateStatus('预览中');
+                        return true;
+                    }
+
+                    if (status === 'stopping') {
+                        setCollectionControls({ collecting: true, stopping: true });
+                        updateStatus('正在保存…');
+                    } else if (status === 'collecting') {
+                        setCollectionControls({ collecting: true, stopping: false });
+                        updateStatus('采集中', 'collecting');
+                    } else {
+                        setCollectionControls({ collecting: false, stopping: false });
+                        updateStatus('预览中');
+                        return true;
+                    }
+                } catch (e) {
+                    log(`轮询采集状态失败: ${e.message}`, 'error');
+                    break;
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+
+            return false;
+        }
+
+        function updateCameraStatus(cameraId, status, className = '') {
+            const statusEl = document.getElementById(`status-${cameraId}`);
+            if (statusEl) {
+                statusEl.textContent = status;
+                statusEl.className = `camera-status ${className}`;
+            }
+        }
+
+        async function fetchCameras() {
+            try {
+                const resp = await authFetch('/api/collection/cameras');
+                if (resp.ok) {
+                    const result = await resp.json();
+                    return result.data.cameras || [];
+                } else {
+                    log('获取摄像头列表失败', 'error');
+                    return [];
+                }
+            } catch (e) {
+                log(`获取摄像头列表失败: ${e.message}`, 'error');
+                return [];
+            }
+        }
+
+        function createCameraContainer(cameraId) {
+            const container = document.createElement('div');
+            container.className = 'video-container';
+            container.id = `container-${cameraId}`;
+            container.innerHTML = `
+                <div class="video-header">
+                    <span class="camera-name">${cameraId}</span>
+                    <span class="camera-status" id="status-${cameraId}">连接中…</span>
+                </div>
+                <div class="video-wrapper">
+                    <video id="video-${cameraId}" autoplay playsinline muted></video>
+                </div>
+            `;
+            return container;
+        }
+
+        async function connectCamera(cameraId) {
+            log(`正在连接摄像头: ${cameraId}`);
+            updateCameraStatus(cameraId, '连接中…', '');
+
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${wsProtocol}//${location.host}/api/collection/preview?camera_id=${cameraId}`);
+
+            const connection = { ws, pc: null };
+            cameraConnections.set(cameraId, connection);
+
+            ws.onopen = () => log(`[${cameraId}] WebSocket 已连接`, 'success');
+
+            ws.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'offer') {
+                    log(`[${cameraId}] 收到 WebRTC offer`);
+                    const pc = new RTCPeerConnection({
+                        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                    });
+                    connection.pc = pc;
+
+                    pc.ontrack = (event) => {
+                        log(`[${cameraId}] 收到视频轨道`, 'success');
+                        const video = document.getElementById(`video-${cameraId}`);
+                        if (video) {
+                            video.srcObject = event.streams[0];
+                        }
+                        updateCameraStatus(cameraId, '已连接', 'connected');
+                    };
+
+                    pc.oniceconnectionstatechange = () => {
+                        log(`[${cameraId}] ICE 状态: ${pc.iceConnectionState}`);
+                        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                            updateCameraStatus(cameraId, '已断开', 'error');
+                        }
+                    };
+
+                    await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+
+                    ws.send(JSON.stringify({
+                        type: 'answer',
+                        data: { sdp: answer.sdp, type: answer.type }
+                    }));
+                    log(`[${cameraId}] 已发送 answer`);
+                }
+            };
+
+            ws.onerror = () => {
+                log(`[${cameraId}] WebSocket 错误`, 'error');
+                updateCameraStatus(cameraId, '连接错误', 'error');
+            };
+
+            ws.onclose = () => {
+                log(`[${cameraId}] WebSocket 已关闭`);
+                if (!isCollecting) {
+                    updateCameraStatus(cameraId, '已断开', 'error');
+                }
+            };
+        }
+
+        async function initCameraPreviews() {
+            const cameras = await fetchCameras();
+
+            videoGrid.innerHTML = '';
+
+            if (cameras.length === 0) {
+                videoGrid.innerHTML = '<div class="no-cameras">未检测到可用摄像头</div>';
+                updateStatus('无摄像头');
+                return;
+            }
+
+            log(`检测到 ${cameras.length} 个摄像头: ${cameras.join(', ')}`, 'success');
+
+            for (const cameraId of cameras) {
+                const container = createCameraContainer(cameraId);
+                videoGrid.appendChild(container);
+            }
+
+            for (const cameraId of cameras) {
+                await connectCamera(cameraId);
+            }
+
+            updateStatus('预览中');
+        }
+
+        function closeAllConnections() {
+            for (const [, connection] of cameraConnections) {
+                if (connection.ws && connection.ws.readyState === WebSocket.OPEN) {
+                    connection.ws.close();
+                }
+                if (connection.pc) {
+                    connection.pc.close();
+                }
+            }
+            cameraConnections.clear();
+        }
+
+        async function startCollection() {
+            const taskId = taskIdInput.value;
+            if (!taskId) {
+                log('请输入任务 ID', 'error');
+                return;
+            }
+
+            log(`开始采集，任务 ID: ${taskId}`);
+
+            try {
+                const resp = await authFetch(`/api/collection/start?task_id=${taskId}`, {
+                    method: 'POST'
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    log(`采集已开始: ${JSON.stringify(data)}`, 'success');
+                    setCollectionControls({ collecting: true, stopping: false });
+                    updateStatus('采集中', 'collecting');
+                } else {
+                    const text = await resp.text();
+                    let errMsg;
+                    try {
+                        const err = JSON.parse(text);
+                        errMsg = err.message || err.detail || JSON.stringify(err);
+                    } catch {
+                        errMsg = text || `HTTP ${resp.status}`;
+                    }
+                    log(`开始采集失败: ${errMsg}`, 'error');
+                    updateStatus('错误', 'error');
+                }
+            } catch (e) {
+                log(`请求失败: ${e.message}`, 'error');
+            }
+        }
+
+        async function stopCollection() {
+            if (isStopping) {
+                log('正在保存中，请勿重复点击', 'info');
+                return;
+            }
+
+            log('停止采集…');
+            setCollectionControls({ collecting: true, stopping: true });
+            updateStatus('正在保存…');
+
+            try {
+                const stopPromise = authFetch('/api/collection/stop', { method: 'POST' });
+                const pollingPromise = pollCollectionStatusUntilSettled();
+                const resp = await stopPromise;
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    log(`采集已停止: ${JSON.stringify(data)}`, 'success');
+                    const settled = await pollingPromise;
+                    if (!settled) {
+                        setCollectionControls({ collecting: false, stopping: false });
+                        updateStatus('预览中');
+                    }
+                } else {
+                    const text = await resp.text();
+                    let errMsg;
+                    try {
+                        const err = JSON.parse(text);
+                        errMsg = err.message || err.detail || JSON.stringify(err);
+                    } catch {
+                        errMsg = text || `HTTP ${resp.status}`;
+                    }
+                    log(`停止采集失败: ${errMsg}`, 'error');
+                    setCollectionControls({ collecting: true, stopping: false });
+                    updateStatus('采集中', 'collecting');
+                }
+            } catch (e) {
+                log(`请求失败: ${e.message}`, 'error');
+                setCollectionControls({ collecting: true, stopping: false });
+                updateStatus('采集中', 'collecting');
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const resp = await authFetch('/api/collection/status');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && data.data && data.data.status === 'collecting') {
+                        setCollectionControls({ collecting: true, stopping: false });
+                        updateStatus('采集中', 'collecting');
+                        log(`检测到正在进行的采集: 任务 ${data.data.task_id}`);
+                    } else if (data && data.data && data.data.status === 'stopping') {
+                        setCollectionControls({ collecting: true, stopping: true });
+                        updateStatus('正在保存…');
+                        log(`检测到采集正在保存: 任务 ${data.data.task_id}`);
+                    }
+                }
+            } catch (e) {
+                // 忽略
+            }
+        }
+
+        startBtn.addEventListener('click', startCollection);
+        stopBtn.addEventListener('click', stopCollection);
+        loginBtn.addEventListener('click', showLoginModal);
+        logoutBtn.addEventListener('click', logout);
+        cancelLoginBtn.addEventListener('click', hideLoginModal);
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (username && password) {
+                login(username, password);
+            }
+        });
+
+        initAuthToken();
+        if (globalAuthToken) {
+            initCameraPreviews();
+            checkStatus();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+[database]
+path = "/home/agilex/workspaces/percept-edge/percept-edge-api/data/prod/percept.db"
+
+[storage]
+base_path = "/home/agilex/workspaces/percept-edge/percept-edge-api/data/prod/collections"
+
+[cloud]
+base_url = "http://192.168.21.139:8989/embodied_api"
+timeout = 30
+
+[upload]
+remote_host = "192.168.21.139"
+remote_path = "/mnt/nas-200t-hdd/collection_data/CR4c"

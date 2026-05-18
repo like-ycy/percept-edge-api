@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统监控面板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0A0A0F;
+            --surface: #111118;
+            --surface-2: #16161F;
+            --surface-3: #1C1C26;
+            --border: rgba(255, 255, 255, 0.06);
+            --border-strong: rgba(255, 255, 255, 0.10);
+            --text: #E4E4E7;
+            --text-2: #A1A1AA;
+            --text-3: #71717A;
+            --accent: #38BDF8;
+            --accent-2: #0EA5E9;
+            --accent-soft: rgba(56, 189, 248, 0.10);
+            --green: #10B981;
+            --green-soft: rgba(16, 185, 129, 0.12);
+            --amber: #F59E0B;
+            --amber-soft: rgba(245, 158, 11, 0.12);
+            --red: #EF4444;
+            --red-soft: rgba(239, 68, 68, 0.12);
+            --radius-sm: 8px;
+            --radius: 10px;
+            --radius-lg: 14px;
+            --shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 16px 40px -16px rgba(0, 0, 0, 0.7);
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 32px 24px 64px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            font-feature-settings: 'cv11', 'ss01';
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(60% 50% at 50% -10%, rgba(56, 189, 248, 0.06), transparent 70%),
+                radial-gradient(40% 40% at 100% 100%, rgba(168, 85, 247, 0.04), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            max-width: 1400px;
+            margin: 0 auto;
+            z-index: 1;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            display: grid;
+            place-items: center;
+            color: #0A0A0F;
+            box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3), 0 8px 24px -8px rgba(56, 189, 248, 0.5);
+        }
+
+        .brand-text h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--text);
+        }
+
+        .brand-text .subtitle {
+            font-size: 12px;
+            color: var(--text-3);
+            margin-top: 2px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-info {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 6px 6px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 13px;
+            color: var(--text-2);
+        }
+
+        .user-info.show { display: inline-flex; }
+
+        .user-info .username {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .user-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #A855F7);
+            display: grid;
+            place-items: center;
+            color: #0A0A0F;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.16); }
+        .btn:active { background: var(--surface-3); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #0A0A0F;
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        .btn-primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+        .btn-ghost { background: transparent; }
+
+        .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transition: border-color 150ms ease;
+        }
+
+        .card:hover { border-color: var(--border-strong); }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-2);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .card-title svg {
+            width: 14px;
+            height: 14px;
+            color: var(--accent);
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .info-row:last-child { border-bottom: none; }
+
+        .info-label { color: var(--text-3); }
+
+        .info-value {
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            font-size: 12.5px;
+            text-align: right;
+            max-width: 60%;
+            overflow-wrap: anywhere;
+        }
+
+        .progress-bar {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            background: var(--surface-3);
+            border-radius: 999px;
+            overflow: hidden;
+            margin: 12px 0 4px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            border-radius: 999px;
+            transition: width 400ms cubic-bezier(0.16, 1, 0.3, 1);
+            min-width: 0;
+        }
+
+        .progress-fill.warn { background: linear-gradient(90deg, var(--amber), #FB923C); }
+        .progress-fill.crit { background: linear-gradient(90deg, var(--red), #F87171); }
+
+        .progress-meta {
+            display: flex;
+            justify-content: flex-end;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-3);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .robot-card { padding: 24px; }
+
+        .component-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+
+        .component-card:last-child { margin-bottom: 0; }
+
+        .component-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+            font-size: 13px;
+            color: var(--text);
+            margin-bottom: 10px;
+            font-family: var(--font-mono);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: var(--font-sans);
+            text-transform: lowercase;
+            letter-spacing: 0.02em;
+        }
+
+        .status-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 0 3px currentColor;
+            opacity: 0.4;
+        }
+
+        .status-badge.status-connected { background: var(--green-soft); color: var(--green); }
+        .status-badge.status-disconnected { background: var(--red-soft); color: var(--red); }
+        .status-badge.status-unknown { background: var(--amber-soft); color: var(--amber); }
+
+        .loading {
+            text-align: center;
+            padding: 64px 0;
+            color: var(--text-3);
+            font-size: 14px;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-left: 8px;
+            border: 1.5px solid var(--border-strong);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 800ms linear infinite;
+            vertical-align: -2px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error {
+            background: var(--red-soft);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #FCA5A5;
+            padding: 14px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .error svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+        /* Login modal */
+        .login-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .login-modal.show { display: flex; }
+
+        .login-box {
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: var(--shadow-lg);
+            animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modal-in {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .login-box h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 20px;
+        }
+
+        .login-box h2 svg { width: 18px; height: 18px; color: var(--accent); }
+
+        .form-group { margin-bottom: 14px; }
+
+        .form-group label {
+            display: block;
+            color: var(--text-2);
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            font-family: inherit;
+            font-size: 13px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            transition: border-color 150ms ease, background 150ms ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: var(--surface-3);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-group .btn { flex: 1; padding: 10px 14px; }
+
+        .login-error {
+            color: var(--red);
+            font-size: 12px;
+            margin-top: 12px;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 20px 16px 48px; }
+            .grid { grid-template-columns: 1fr; }
+            .header { gap: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-modal" id="loginModal">
+        <div class="login-box">
+            <h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                登录
+            </h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" value="robot_wx" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" value="wx@123" required autocomplete="current-password">
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">登录</button>
+                    <button type="button" class="btn" id="cancelLoginBtn">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                </div>
+                <div class="brand-text">
+                    <h1>系统监控面板</h1>
+                    <div class="subtitle" id="lastUpdate">正在加载…</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="user-info" id="userInfo">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <span class="username" id="usernameDisplay"></span>
+                    <button class="btn btn-ghost" id="logoutBtn" style="padding: 4px 10px;">退出</button>
+                </div>
+                <button class="btn" onclick="refreshData()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    刷新
+                </button>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="errorText"></span>
+        </div>
+
+        <div id="loading" class="loading">正在加载数据</div>
+
+        <div id="content" style="display: none;">
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="14" x2="22" y2="14"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="14" x2="4" y2="14"/></svg>
+                        CPU 信息
+                    </div>
+                    <div class="info-row"><span class="info-label">总核心数</span><span class="info-value" id="cpuTotalCores">-</span></div>
+                    <div class="info-row"><span class="info-label">物理核心数</span><span class="info-value" id="cpuPhysicalCores">-</span></div>
+                    <div class="info-row"><span class="info-label">CPU 使用率</span><span class="info-value" id="cpuPercent">-</span></div>
+                    <div class="progress-bar"><div class="progress-fill" id="cpuProgress" style="width: 0%;"></div></div>
+                    <div class="progress-meta"><span id="cpuProgressText">0.0%</span></div>
+                    <div class="info-row"><span class="info-label">频率范围</span><span class="info-value" id="cpuFreq">-</span></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg>
+                        内存信息
+                    </div>
+                    <div class="info-row"><span class="info-label">总内存</span><span class="info-value" id="memTotal">-</span></div>
+                    <div class="info-row"><span class="info-label">已使用</span><span class="info-value" id="memUsed">-</span></div>
+                    <div class="info-row"><span class="info-label">可用</span><span class="info-value" id="memAvailable">-</span></div>
+                    <div class="info-row"><span class="info-label">使用率</span><span class="info-value" id="memPercent">-</span></div>
+                    <div class="progress-bar"><div class="progress-fill" id="memProgress" style="width: 0%;"></div></div>
+                    <div class="progress-meta"><span id="memProgressText">0.0%</span></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+                        磁盘信息
+                    </div>
+                    <div class="info-row"><span class="info-label">总容量</span><span class="info-value" id="diskTotal">-</span></div>
+                    <div class="info-row"><span class="info-label">已使用</span><span class="info-value" id="diskUsed">-</span></div>
+                    <div class="info-row"><span class="info-label">可用</span><span class="info-value" id="diskFree">-</span></div>
+                    <div class="info-row"><span class="info-label">使用率</span><span class="info-value" id="diskPercent">-</span></div>
+                    <div class="progress-bar"><div class="progress-fill" id="diskProgress" style="width: 0%;"></div></div>
+                    <div class="progress-meta"><span id="diskProgressText">0.0%</span></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        平台信息
+                    </div>
+                    <div class="info-row"><span class="info-label">系统</span><span class="info-value" id="platformSystem">-</span></div>
+                    <div class="info-row"><span class="info-label">平台</span><span class="info-value" id="platformPlatform">-</span></div>
+                    <div class="info-row"><span class="info-label">版本</span><span class="info-value" id="platformRelease">-</span></div>
+                    <div class="info-row"><span class="info-label">MAC 地址</span><span class="info-value" id="platformMac">-</span></div>
+                    <div class="info-row"><span class="info-label">IP 地址</span><span class="info-value" id="platformIp">-</span></div>
+                </div>
+            </div>
+
+            <div class="card robot-card">
+                <div class="card-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+                    机器人状态
+                </div>
+                <div id="robotInfo">
+                    <div class="info-row"><span class="info-label">机器人型号</span><span class="info-value" id="robotModel">-</span></div>
+                    <div class="info-row"><span class="info-label">机器人类型</span><span class="info-value" id="robotType">-</span></div>
+                    <div class="info-row"><span class="info-label">描述</span><span class="info-value" id="robotDesc">-</span></div>
+                    <div class="info-row"><span class="info-label">注册信息</span><span class="info-value" id="robotRegisterInfo">-</span></div>
+                </div>
+                <div id="components" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/monitor';
+        let globalAuthToken = localStorage.getItem('authToken') || '';
+        let currentUser = localStorage.getItem('username') || '';
+
+        const loginModal = document.getElementById('loginModal');
+        const loginForm = document.getElementById('loginForm');
+        const cancelLoginBtn = document.getElementById('cancelLoginBtn');
+        const loginError = document.getElementById('loginError');
+        const userInfo = document.getElementById('userInfo');
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        const userAvatar = document.getElementById('userAvatar');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        function pctClass(pct) {
+            if (pct >= 85) return 'crit';
+            if (pct >= 60) return 'warn';
+            return '';
+        }
+
+        function initAuth() {
+            if (globalAuthToken && currentUser) {
+                userInfo.classList.add('show');
+                usernameDisplay.textContent = currentUser;
+                userAvatar.textContent = (currentUser[0] || 'U').toUpperCase();
+                hideLoginModal();
+            } else {
+                userInfo.classList.remove('show');
+                showLoginModal();
+            }
+        }
+
+        function showLoginModal() {
+            loginModal.classList.add('show');
+            loginError.textContent = '';
+        }
+
+        function hideLoginModal() {
+            loginModal.classList.remove('show');
+        }
+
+        async function login(username, password) {
+            try {
+                const response = await fetch('http://192.168.21.138:8989/embodied_api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.code === 200 && result.data && result.data.token) {
+                    globalAuthToken = result.data.token;
+                    currentUser = result.data.username;
+                    localStorage.setItem('authToken', globalAuthToken);
+                    localStorage.setItem('username', currentUser);
+
+                    hideLoginModal();
+                    initAuth();
+                    loadData();
+                } else {
+                    loginError.textContent = result.msg || '登录失败';
+                }
+            } catch (error) {
+                loginError.textContent = `登录失败: ${error.message}`;
+            }
+        }
+
+        function logout() {
+            globalAuthToken = '';
+            currentUser = '';
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+
+            document.getElementById('content').style.display = 'none';
+            initAuth();
+        }
+
+        async function authFetch(url, options = {}) {
+            const headers = options.headers || {};
+            if (globalAuthToken) {
+                headers['Authorization'] = `Bearer ${globalAuthToken}`;
+            }
+            return fetch(url, { ...options, headers });
+        }
+
+        async function fetchSystemInfo() {
+            const response = await authFetch(`${API_BASE}/system`);
+            const result = await response.json();
+            if (result.code === 200 && result.data) {
+                updateSystemInfo(result.data);
+            }
+        }
+
+        async function fetchRobotStatus() {
+            const response = await authFetch(`${API_BASE}/robot`);
+            const result = await response.json();
+            if (result.code === 200 && result.data) {
+                updateRobotStatus(result.data);
+            }
+        }
+
+        function setProgress(barId, textId, pct) {
+            const bar = document.getElementById(barId);
+            const text = document.getElementById(textId);
+            const safe = Math.max(0, Math.min(100, pct));
+            bar.style.width = `${safe}%`;
+            bar.className = `progress-fill ${pctClass(safe)}`;
+            text.textContent = `${pct.toFixed(1)}%`;
+        }
+
+        function updateSystemInfo(data) {
+            document.getElementById('cpuTotalCores').textContent = data.cpu.total_cores;
+            document.getElementById('cpuPhysicalCores').textContent = data.cpu.physical_cores;
+            document.getElementById('cpuPercent').textContent = `${data.cpu.cpu_percent.toFixed(1)}%`;
+            setProgress('cpuProgress', 'cpuProgressText', data.cpu.cpu_percent);
+            document.getElementById('cpuFreq').textContent =
+                `${data.cpu.freq_min.toFixed(0)} – ${data.cpu.freq_max.toFixed(0)} MHz`;
+
+            document.getElementById('memTotal').textContent = `${data.memory.total_gb.toFixed(2)} GB`;
+            document.getElementById('memUsed').textContent = `${data.memory.used_gb.toFixed(2)} GB`;
+            document.getElementById('memAvailable').textContent = `${data.memory.available_gb.toFixed(2)} GB`;
+            document.getElementById('memPercent').textContent = `${data.memory.percent.toFixed(1)}%`;
+            setProgress('memProgress', 'memProgressText', data.memory.percent);
+
+            document.getElementById('diskTotal').textContent = `${data.disk.total_gb.toFixed(2)} GB`;
+            document.getElementById('diskUsed').textContent = `${data.disk.used_gb.toFixed(2)} GB`;
+            document.getElementById('diskFree').textContent = `${data.disk.free_gb.toFixed(2)} GB`;
+            document.getElementById('diskPercent').textContent = `${data.disk.percent.toFixed(1)}%`;
+            setProgress('diskProgress', 'diskProgressText', data.disk.percent);
+
+            document.getElementById('platformSystem').textContent = data.platform.system;
+            document.getElementById('platformPlatform').textContent = data.platform.platform;
+            document.getElementById('platformRelease').textContent = data.platform.release;
+            document.getElementById('platformMac').textContent = data.platform.mac_address || '-';
+            document.getElementById('platformIp').textContent = data.platform.ip_address || '-';
+        }
+
+        function formatRegisterInfo(registerInfo) {
+            if (!registerInfo || typeof registerInfo !== 'object') {
+                return '-';
+            }
+            const items = Object.entries(registerInfo).filter(([, value]) => {
+                if (value === null || value === undefined) return false;
+                return String(value).trim() !== '';
+            });
+            if (!items.length) return '-';
+            return items.map(([key, value]) => `${key}: ${value}`).join(' | ');
+        }
+
+        function updateRobotStatus(data) {
+            document.getElementById('robotModel').textContent = data.metadata.robot_model || '-';
+            document.getElementById('robotType').textContent = data.metadata.robot_type || '-';
+            document.getElementById('robotDesc').textContent =
+                data.metadata.robot_desc.join(', ') || '-';
+            document.getElementById('robotRegisterInfo').textContent =
+                formatRegisterInfo(data.metadata.robot_register_info);
+
+            const componentsDiv = document.getElementById('components');
+            componentsDiv.innerHTML = '';
+
+            data.components.forEach(comp => {
+                const compCard = document.createElement('div');
+                compCard.className = 'component-card';
+
+                let statusClass = 'status-unknown';
+                if (comp.connect_status === 'connected') statusClass = 'status-connected';
+                else if (comp.connect_status === 'disconnected') statusClass = 'status-disconnected';
+
+                let html = `
+                    <div class="component-header">
+                        <span>${comp.component_id}</span>
+                        <span class="status-badge ${statusClass}">${comp.connect_status}</span>
+                    </div>
+                    <div class="info-row"><span class="info-label">频率</span><span class="info-value">${comp.hz} Hz</span></div>
+                `;
+
+                if (comp.width && comp.height) {
+                    html += `<div class="info-row"><span class="info-label">分辨率</span><span class="info-value">${comp.width} × ${comp.height}</span></div>`;
+                }
+                if (comp.jpeg_quality) {
+                    html += `<div class="info-row"><span class="info-label">JPEG 质量</span><span class="info-value">${comp.jpeg_quality}</span></div>`;
+                }
+                if (comp.depth_scale !== null && comp.depth_scale !== undefined) {
+                    html += `<div class="info-row"><span class="info-label">深度缩放</span><span class="info-value">${comp.depth_scale}</span></div>`;
+                }
+                if (comp.brand && comp.model) {
+                    html += `<div class="info-row"><span class="info-label">型号</span><span class="info-value">${comp.brand} ${comp.model}</span></div>`;
+                }
+                if (comp.detail) {
+                    html += `<div class="info-row"><span class="info-label">详情</span><span class="info-value">${comp.detail}</span></div>`;
+                }
+                if (comp.joint_data_dim) {
+                    html += `<div class="info-row"><span class="info-label">关节数据维度</span><span class="info-value">${comp.joint_data_dim}</span></div>`;
+                }
+                if (comp.eef_data_dim) {
+                    html += `<div class="info-row"><span class="info-label">末端执行器维度</span><span class="info-value">${comp.eef_data_dim}</span></div>`;
+                }
+                if (comp.gripper_data_dim) {
+                    html += `<div class="info-row"><span class="info-label">夹爪数据维度</span><span class="info-value">${comp.gripper_data_dim}</span></div>`;
+                }
+                if (comp.joint_speed_dim) {
+                    html += `<div class="info-row"><span class="info-label">关节速度维度</span><span class="info-value">${comp.joint_speed_dim}</span></div>`;
+                }
+                if (comp.current_dim) {
+                    html += `<div class="info-row"><span class="info-label">电流维度</span><span class="info-value">${comp.current_dim}</span></div>`;
+                }
+                if (comp.effort_dim) {
+                    html += `<div class="info-row"><span class="info-label">力矩维度</span><span class="info-value">${comp.effort_dim}</span></div>`;
+                }
+
+                compCard.innerHTML = html;
+                componentsDiv.appendChild(compCard);
+            });
+        }
+
+        async function loadData() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('content').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+
+                await Promise.all([fetchSystemInfo(), fetchRobotStatus()]);
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('lastUpdate').textContent =
+                    `最后更新 · ${new Date().toLocaleString('zh-CN', { hour12: false })}`;
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'flex';
+                document.getElementById('errorText').textContent = `加载失败: ${error.message}`;
+            }
+        }
+
+        async function refreshData() {
+            try {
+                const response = await authFetch(`${API_BASE}/refresh`, { method: 'POST' });
+                const result = await response.json();
+                if (result.code === 200) {
+                    await loadData();
+                } else {
+                    alert('刷新失败: ' + result.msg);
+                }
+            } catch (error) {
+                alert('刷新失败: ' + error.message);
+            }
+        }
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (username && password) {
+                login(username, password);
+            }
+        });
+
+        cancelLoginBtn.addEventListener('click', hideLoginModal);
+        logoutBtn.addEventListener('click', logout);
+
+        initAuth();
+        if (globalAuthToken) {
+            loadData();
+            setInterval(loadData, 30000);
+        }
+    </script>
+</body>
+</html>

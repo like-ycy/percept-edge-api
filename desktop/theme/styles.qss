@@ -1,0 +1,99 @@
+QWidget {
+    background: #0e0e0e;
+    color: #e6e5e5;
+    font-family: "Inter";
+    font-size: 13px;
+}
+
+QMainWindow {
+    background: #0e0e0e;
+}
+
+QFrame#TopBar,
+QFrame#StagePanel,
+QFrame#LogFilterBar,
+QFrame#FooterBar,
+QFrame#StageCard {
+    border: none;
+    border-radius: 4px;
+}
+
+QFrame#TopBar,
+QFrame#StagePanel,
+QFrame#LogFilterBar,
+QFrame#FooterBar {
+    background: #131313;
+}
+
+QFrame#StageCard {
+    background: #191a1a;
+}
+
+QFrame#StageCard[active="true"] {
+    background: #1f2020;
+}
+
+QPushButton,
+QToolButton,
+QComboBox,
+QLineEdit {
+    background: #191a1a;
+    color: #e6e5e5;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+}
+
+QPushButton:hover,
+QToolButton:hover,
+QComboBox:hover {
+    background: #252626;
+}
+
+QPushButton#PrimaryButton {
+    background: #a3c9ff;
+    color: #004177;
+    font-weight: 700;
+}
+
+QPushButton#DangerButton {
+    background: #ee7d77;
+    color: #490106;
+    font-weight: 700;
+}
+
+QLabel#StatusChip {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QTableView {
+    background: #000000;
+    gridline-color: transparent;
+    border: none;
+    selection-background-color: #004883;
+}
+
+QHeaderView::section {
+    background: #131313;
+    color: #949fae;
+    border: none;
+    padding: 6px;
+    font-weight: 600;
+}
+
+QScrollBar:vertical,
+QScrollBar:horizontal {
+    background: #131313;
+    border: none;
+}
+
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal {
+    background: #323c49;
+    border-radius: 3px;
+    min-height: 24px;
+    min-width: 24px;
+}
