@@ -1,5 +1,7 @@
 # Percept Edge API
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/like-ycy/percept-edge-api)
+
 边缘数据采集平台后端服务，基于 `FastAPI + SQLAlchemy + ZeroMQ + WebRTC`。
 
 提供任务同步、采集控制、存储查询、上传调度、健康检查与调试能力。
