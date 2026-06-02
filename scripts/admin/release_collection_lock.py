@@ -29,7 +29,7 @@ def _format_state(state) -> str:
 
 
 async def _run(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    settings = get_settings(env_name=args.env, robot_name=args.robot)
     session_maker = await init_database(settings.database)
     svc = CollectionLockService(session_maker)
     await svc.ensure_row()
@@ -72,6 +72,8 @@ async def _run(args: argparse.Namespace) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Release collection global lock")
+    parser.add_argument("--robot", help="机器人名称；不传则读取 PERCEPT_ROBOT/APP_ROBOT")
+    parser.add_argument("--env", help="运行环境 test/prod；不传则读取 PERCEPT_ENV/APP_ENV")
     parser.add_argument("--operator", help="操作者标识（解锁时必填）")
     parser.add_argument("--note", default=None, help="解锁备注")
     parser.add_argument("--status", action="store_true", help="仅查询状态")

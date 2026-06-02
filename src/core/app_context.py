@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from src.services.heartbeat_client import HeartbeatClient
     from src.services.monitor_service import MonitorService
     from src.services.process_monitor import ProcessMonitor
+    from src.services.robot_command_service import RobotCommandService
     from src.services.task_sync_service import TaskSyncService
     from src.services.upload_service import UploadService
     from src.services.webrtc_service import WebRTCService
@@ -67,6 +68,7 @@ class AppServices:
     collection_service: "CollectionService"
     upload_service: "UploadService"
     collection_lock_service: "CollectionLockService | None" = None
+    robot_command_service: "RobotCommandService | None" = None
     heartbeat: "HeartbeatClient | None" = None
     process_monitor: "ProcessMonitor | None" = None
 
@@ -84,6 +86,7 @@ class AppServices:
         collection_service: "CollectionService",
         upload_service: "UploadService",
         collection_lock_service: "CollectionLockService | None" = None,
+        robot_command_service: "RobotCommandService | None" = None,
         heartbeat: "HeartbeatClient | None" = None,
         process_monitor: "ProcessMonitor | None" = None,
     ) -> None:
@@ -99,6 +102,7 @@ class AppServices:
         self.collection_service = collection_service
         self.upload_service = upload_service
         self.collection_lock_service = collection_lock_service
+        self.robot_command_service = robot_command_service
         self.heartbeat = heartbeat
         self.process_monitor = process_monitor
 

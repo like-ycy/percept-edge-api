@@ -13,7 +13,7 @@ from typing import Any, Mapping, Optional, Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class ShutdownStep:
-    """单个停止阶段：向进程树发送 signal 后等待 grace 秒。"""
+    """单个停止阶段：发送 signal 后等待 grace 秒。"""
 
     signal: int
     grace: float
@@ -30,14 +30,14 @@ class ProcessSpec:
     shell: bool = True
     shutdown_signal: int = 15
     shutdown_grace: float = 5.0
-    shutdown_sequence: tuple[ShutdownStep, ...] = ()
     force_kill_grace: float = 2.0
+    shutdown_sequence: tuple[ShutdownStep, ...] = ()
 
     def effective_shutdown_sequence(self) -> tuple[ShutdownStep, ...]:
-        """返回实际停止序列；未显式配置时兼容旧的单信号字段。"""
+        """返回进程停止序列；未配置多阶段时保持旧单信号兼容。"""
         if self.shutdown_sequence:
             return self.shutdown_sequence
-        return (ShutdownStep(signal=int(self.shutdown_signal), grace=float(self.shutdown_grace)),)
+        return (ShutdownStep(signal=int(self.shutdown_signal), grace=self.shutdown_grace),)
 
 
 @dataclass(frozen=True)
@@ -46,7 +46,7 @@ class HealthProbe:
 
     kind:
         - "http"          target=URL，expect={"status": 200, "json_path": ["data","ready"]}
-        - "zmq_monitor"   target=rep_endpoint，expect={"timeout": 0.5}
+        - "zmq_monitor"   target=command_endpoint，expect={"timeout": 0.5}
         - "pid"           target="" 仅检查进程存活
         - "custom"        由调用方扩展
     """

@@ -96,7 +96,12 @@ class DataIntegrityValidator:
             summary=summary,
         )
 
-    async def validate_collection(self, directory: Path, mode: str = "full") -> ValidationResult:
+    async def validate_collection(
+        self,
+        directory: Path,
+        mode: str = "full",
+        expected_frames: int | None = None,
+    ) -> ValidationResult:
         """校验采集目录的数据完整性
 
         Args:
@@ -110,6 +115,10 @@ class DataIntegrityValidator:
         if isinstance(fast_result, ValidationResult):
             return fast_result
 
+        expected_video_frames = (
+            expected_frames if expected_frames is not None else fast_result.expected_steps
+        )
+
         frame_errors: list[FileValidationError] = []
         if mode == "full" and self._should_run_deep_validation(fast_result):
             video_files = [
@@ -117,16 +126,14 @@ class DataIntegrityValidator:
                 for file_name in fast_result.found_files
                 if file_name in set(fast_result.expected_files)
             ]
-            frame_errors = await self._validate_all_video_frames(
-                video_files, fast_result.expected_steps
-            )
+            frame_errors = await self._validate_all_video_frames(video_files, expected_video_frames)
 
         errors = [*fast_result.errors, *frame_errors]
         status = self._determine_status(errors, fast_result.missing_files, fast_result.extra_files)
         summary = self._generate_summary(
             status,
             len(fast_result.found_files),
-            fast_result.expected_steps,
+            expected_video_frames,
             fast_result.missing_files,
             fast_result.extra_files,
             frame_errors,
@@ -135,7 +142,7 @@ class DataIntegrityValidator:
         return ValidationResult(
             status=status,
             directory=str(fast_result.directory),
-            expected_steps=fast_result.expected_steps,
+            expected_steps=expected_video_frames,
             expected_files=fast_result.expected_files,
             found_files=fast_result.found_files,
             missing_files=fast_result.missing_files,

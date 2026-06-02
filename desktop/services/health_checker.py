@@ -3,7 +3,7 @@
 轮询（interval / deadline）由 FlowRunner 负责，此处只提供 check_once。
 支持的 probe kind:
     - "http"          HTTP GET；可选 expect={"status": int, "match": {"a.b.c": value, ...}}
-    - "zmq_monitor"   Robot OS ZMQ monitor 探测（复用 scripts.debug.wait_robot_os_ready）
+    - "zmq_monitor"   Robot OS command monitor 探测（复用 scripts.debug.wait_robot_os_ready）
 """
 
 from __future__ import annotations

@@ -1,7 +1,5 @@
 """调试相关 Schema"""
 
-from __future__ import annotations
-
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -55,56 +53,8 @@ class ZeroMQDebugInfo(BaseModel):
     # 帧率 (fps)
     fps: float = 0.0  # 平均帧率 (frames_received / uptime_seconds)
 
-
-class WebRTCPreviewSettingsDebug(BaseModel):
-    """WebRTC 预览配置调试信息。"""
-
-    max_width: int
-    max_height: int
-    max_fps: float
-    max_encoded_frame_bytes: int
-
-
-class WebRTCTrackDebugInfo(BaseModel):
-    """单路 WebRTC 预览轨道调试信息。"""
-
-    frames_requested: int = 0
-    frames_sent: int = 0
-    frames_reused: int = 0
-    fallback_frames: int = 0
-    oversized_frames_skipped: int = 0
-    decode_failures: int = 0
-    resize_count: int = 0
-    last_frame_at: datetime | None = None
-    last_encoded_bytes: int | None = None
-    last_source_width: int | None = None
-    last_source_height: int | None = None
-    last_output_width: int | None = None
-    last_output_height: int | None = None
-    last_decode_ms: float | None = None
-    last_resize_ms: float | None = None
-    last_total_recv_ms: float | None = None
-    active_profile: str | None = None
-
-
-class WebRTCConnectionDebugInfo(BaseModel):
-    """WebRTC 连接调试信息。"""
-
-    client_id: str
-    camera_id: str
-    created_at: datetime
-    connection_state: str | None = None
-    ice_connection_state: str | None = None
-    signaling_state: str | None = None
-    track: WebRTCTrackDebugInfo
-
-
-class WebRTCDebugInfo(BaseModel):
-    """WebRTC 服务调试信息。"""
-
-    active_connections: int
-    total_connections_created: int
-    total_connections_closed: int
-    available_cameras: list[str]
-    preview_settings: WebRTCPreviewSettingsDebug
-    connections: list[WebRTCConnectionDebugInfo]
+    # watchdog 状态
+    watchdog_enabled: bool = False
+    is_stale: bool = False
+    stale_seconds: float | None = None  # 距离最后一次收到数据经过的秒数
+    stale_threshold_seconds: float | None = None

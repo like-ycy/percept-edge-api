@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>原始采集数据查看</title>
+  <link rel="stylesheet" href="assets/vercel-redesign.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><title>原始数据</title><path d="M4 4h16v16H4z"></path><path d="M8 8h8v8H8z"></path></svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-title">percept-static</span>
+            <span class="brand-subtitle">原始采集数据查看</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="页面导航">
+          <a href="index.html">入口</a>
+          <a href="redesign-upload-reconcile.html">补偿上传</a>
+          <a href="redesign-collection.html">数据采集</a>
+          <a href="redesign-monitor.html">系统监控</a>
+          <a href="redesign-processes.html">进程监控</a>
+          <a href="redesign-unlock.html">采集锁</a>
+          <a class="active" href="redesign-raw-info.html">原始数据</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container page">
+      <a class="backlink" href="index.html">← 返回入口</a>
+      <section class="hero">
+        <div class="hero-stack">
+          <div class="eyebrow">capture metadata</div>
+          <h1>原始采集数据查看</h1>
+          <p class="lead">按记录 ID 检索 capture 元信息</p>
+        </div>
+        <div class="summary-strip">
+          <div class="static-auth-status" data-static-auth-status></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>查询</h2>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="record_id">采集记录 ID <span class="req">*</span></label>
+            <div class="input-group">
+              <input id="record_id" type="number" placeholder="例如 1234" autocomplete="off">
+              <button id="btn-query" class="btn primary" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><title>查询</title><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                查询
+              </button>
+            </div>
+          </div>
+          <div id="msg" class="callout raw-message"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="result">
+        <div class="panel-header">
+          <h2>概要</h2>
+        </div>
+        <div class="panel-body">
+          <div class="kv" id="summary">
+            <div class="k">record_id</div><div class="v">—</div>
+            <div class="k">output_dir</div><div class="v">—</div>
+            <div class="k">capture_dir</div><div class="v">—</div>
+            <div class="k">sealed</div><div class="v">—</div>
+            <div class="k">frame_count</div><div class="v">—</div>
+            <div class="k">raw_bytes</div><div class="v">—</div>
+            <div class="k">start_time</div><div class="v">—</div>
+            <div class="k">end_time</div><div class="v">—</div>
+            <div class="k">sampled_frames</div><div class="v">—</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid two">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>摄像头 <span class="count" id="cam-count">0</span></h2>
+          </div>
+          <div class="panel-body">
+            <div class="terminal" id="cams">暂无数据</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Segment 文件 <span class="count" id="seg-count">0</span></h2>
+          </div>
+          <div class="panel-body">
+            <div class="terminal" id="segs">暂无数据</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="assets/static-auth.js"></script>
+  <script src="assets/redesign-raw-info.js"></script>
+</body>
+</html>

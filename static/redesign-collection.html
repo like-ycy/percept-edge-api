@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据采集测试</title>
+  <link rel="stylesheet" href="assets/vercel-redesign.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><title>Percept Static</title><path d="M4 4h16v16H4z"></path><path d="M8 8h8v8H8z"></path></svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-title">percept-static</span>
+            <span class="brand-subtitle">数据采集测试</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="页面导航">
+          <a href="index.html">入口</a>
+          <a href="redesign-upload-reconcile.html">补偿上传</a>
+          <a class="active" href="redesign-collection.html">数据采集</a>
+          <a href="redesign-monitor.html">系统监控</a>
+          <a href="redesign-processes.html">进程监控</a>
+          <a href="redesign-unlock.html">采集锁</a>
+          <a href="redesign-raw-info.html">原始数据</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container page">
+      <a class="backlink" href="index.html">← 返回入口</a>
+      <section class="hero">
+        <div class="hero-stack">
+          <div class="eyebrow">WebRTC multi-stream</div>
+          <h1>数据采集测试</h1>
+          <p class="lead">实时预览 · WebRTC 多路传输</p>
+        </div>
+        <div class="summary-strip">
+          <div class="static-auth-status" data-static-auth-status></div>
+        </div>
+      </section>
+
+      <div class="layout">
+        <main class="stack">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>摄像头预览</h2>
+              <span class="badge neutral">正在加载摄像头列表…</span>
+            </div>
+            <div class="panel-body">
+              <div class="video-grid" id="videoGrid">
+                <div class="video-empty">
+                  <div class="screen" aria-hidden="true"></div>
+                  <span>正在加载摄像头列表…</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>采集控制</h2>
+              <span class="status-pill">
+                <span class="status-label">状态</span>
+                <span id="statusValue" class="status-value">未连接</span>
+              </span>
+            </div>
+            <div class="panel-body">
+              <div class="input-group">
+                <div class="field">
+                  <label for="taskId">任务 ID</label>
+                  <input type="number" id="taskId" value="1" min="1">
+                </div>
+                <div class="controls-actions actions">
+                  <button type="button" id="startBtn" class="btn primary">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><title>开始采集</title><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    开始采集
+                  </button>
+                  <button type="button" id="stopBtn" class="btn danger" disabled>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><title>停止采集</title><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
+                    停止采集
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>运行日志</h2>
+            </div>
+            <div class="panel-body">
+              <div class="terminal log" id="log"></div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </main>
+  </div>
+  <script src="assets/static-auth.js"></script>
+  <script src="assets/redesign-collection.js"></script>
+</body>
+</html>

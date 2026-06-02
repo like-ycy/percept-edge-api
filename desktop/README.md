@@ -21,10 +21,11 @@ bash desktop/launch.sh --robot robot-cr4c
 
 | Profile         | display | 启动链路                                                  |
 |-----------------|---------|-----------------------------------------------------------|
-| `robot-cr4c`    | CR4C    | 同构臂：roscore → CAN → ros_slave → ros_master → robot_os → api → nginx；VR：roscore → CAN → VR ROS → VR 准备确认 → robot_os → api → nginx |
-| `robot-cr4a`    | CR4A    | 同 CR4C（VR ROS 路径按机器人配置区分）    |
-| `robot-cr1`     | CR1     | roscore → CAN(0..4) → master1 → pos_follow1 → master2 → pos_follow2 → robot_os → api → nginx（仅 bilateral） |
-| `robot-w1`      | W1      | VR：robot_os → api → nginx（无 ROS / CAN 链路）           |
+| `robot-cr4c`    | CR4C    | 同构臂：roscore → CAN → ros_slave → ros_master → robot_os → api → nginx；VR：robot_os → api → nginx |
+| `robot-cr4a`    | CR4A    | 同 CR4C（启动命令通过 `ROBOT_OS_CMD` 等环境变量覆盖）    |
+| `robot-cr1`     | CR1     | roscore → CAN(0..4) → master1 → pos_follow1 → master2 → pos_follow2 → robot_os → api → nginx |
+| `robot-cr5`     | CR5     | 同构臂：robot_os → api → nginx（无 ROS / CAN 链路）     |
+| `robot-w1`      | W1      | VR：robot_os → api → nginx（不托管 ROS 节点，但 Robot OS 启动前会 source ROS Python 环境） |
 
 ## 目录结构
 
@@ -39,15 +40,17 @@ desktop/
 ├── profiles/               # 机型 = adapter 组合 + flow_factory
 │   ├── base.py             # RobotProfile dataclass
 │   ├── registry.py         # @register / load_profile
-│   └── cr1.py / cr4a.py / cr4c.py / w1.py
+│   └── cr1.py / cr4a.py / cr4c.py / cr5.py / w1.py
 ├── flows/                  # 启动编排
 │   ├── base.py             # Step / StepKind / FlowEvent
 │   ├── sequential.py       # SequentialFlowRunner
-│   ├── cr_flow.py          # CR 系列共用，profile.extra 控制差异
+│   ├── cr_flow.py          # CR4A / CR4C 共用，profile.extra 控制差异
+│   ├── cr1_flow.py         # CR1 专用：四路 ROS arm 命令串行启动
 │   └── w1_flow.py
 ├── adapters/               # 单进程的 ProcessSpec / HealthProbe 产出器
 │   ├── base.py             # Adapter Protocol + ProcessSpec / HealthProbe / BuildContext
 │   ├── ros_adapter.py      # core / slave / master 三角色
+│   ├── cr1_ros_adapter.py  # CR1 从 desktop.runtime.ros_commands 读取多 ROS 命令
 │   ├── can_adapter.py      # slcand 一次性脚本
 │   ├── robot_os_adapter.py # robot_os pyz + zmq_monitor probe（可选 source ROS setup）
 │   └── api_adapter.py      # main.py + http probe
@@ -88,9 +91,6 @@ desktop/
   - `PERCEPT_ENV` / `APP_ENV` — 环境
   - `PERCEPT_LAUNCH_MODE` — 启动方式：`bilateral`（同构臂）/ `vr`（VR）
   - `ROS_ENV_CWD` / `ROS_SETUP_SCRIPT` / `ROSCORE_CMD` / `ROS_SLAVE_CMD` / `ROS_MASTER_CMD`
-  - `VR_ROS_ENABLED` / `VR_ROS_PREPARE_COUNTDOWN_SECONDS`
-  - `VR_ROS_ARM_CWD` / `VR_ROS_ARM_SETUP_SCRIPT` / `VR_ROS_ARM_CMD`
-  - `VR_ROS_SERIAL_CWD` / `VR_ROS_SERIAL_SETUP_SCRIPT` / `VR_ROS_SERIAL_CMD`
   - `ROBOT_OS_CWD` / `ROBOT_OS_CMD`
   - `API_CWD` / `API_CMD` / `SERVER__PORT`
   - 各类超时：`API_STARTUP_TIMEOUT` / `ROBOT_OS_READY_TIMEOUT` / `*_GRACE` 系列
@@ -114,6 +114,23 @@ api_cmd = "uv run main.py"
 runtime_health_interval = 300.0
 ```
 
+CR1 的 ROS 启动链比较特殊，不使用 `ros_slave_cmd` / `ros_master_cmd` 这组固定字段；
+而是在 `config/robots/robot-cr1/base.toml` 中通过多段 `[[desktop.runtime.ros_commands]]`
+声明 `roscore`、`ros_master1`、`ros_pos_follow1`、`ros_master2`、`ros_pos_follow2`。
+这些路径和命令属于单台机器人固定运行时配置，应放在 `base.toml`，而不是 test/prod 差异配置中。
+
+CR1 示例：
+
+```toml
+[[desktop.runtime.ros_commands]]
+name = "ros_master1"
+log_label = "ROS_MASTER1"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master1"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master1/devel/setup.bash"
+cmd = "roslaunch arm_control L5.launch"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"
+```
+
 ## 新增机型
 
 1. `desktop/profiles/<name>.py`：用 `@register("robot-<name>")` 装饰工厂函数
@@ -127,10 +144,10 @@ runtime_health_interval = 300.0
 |---------|---------|------|
 | `RosAdapter` | `role: "core"\|"slave"\|"master"`, `name?` | name 缺省派生自 role（roscore / ros_slave / ros_master） |
 | `CanAdapter` | `name="can_init"` | 一次性 slcand 初始化 |
-| `RobotOsAdapter` | `name="robot_os"`, `source_ros=True`, `ros_setup_override=None` | `source_ros=False` 跳过 ROS setup（W1 等无 ROS 机型）；`ros_setup_override` 显式指定 setup 路径，覆盖 `RuntimeConfig.ros_setup_script` |
+| `RobotOsAdapter` | `name="robot_os"`, `source_ros=True`, `ros_setup_override=None` | `source_ros=False` 跳过 ROS setup（仅适用于 Robot OS 完全不依赖 ROS Python 包的机型）；`ros_setup_override` 显式指定 setup 路径，覆盖 `RuntimeConfig.ros_setup_script` |
 | `ApiAdapter` | `name="api"` | HTTP gate 探测 `data.message=="Percept Edge API"` |
 
-`RobotOsAdapter` 之所以默认要 source ROS setup：`bash -lc` 是 login shell，**不读 `~/.bashrc`**；如果你的 ROS 环境靠 `.bashrc` 注入 `PYTHONPATH`，子进程会找不到 `rospy`，即便用绝对路径的 python 解释器也不行。CR 系列 profile 的 `RobotOsAdapter()` 默认走这条路径；W1 必须传 `source_ros=False`。
+`RobotOsAdapter` 之所以默认要 source ROS setup：`bash -lc` 是 login shell，**不读 `~/.bashrc`**；如果你的 ROS 环境靠 `.bashrc` 注入 `PYTHONPATH`，子进程会找不到 `rospy` / `diagnostic_msgs`，即便用绝对路径的 python 解释器也不行。依赖 ROS Python 包的 Robot OS 必须走这条路径；只有 Robot OS 完全不依赖 ROS Python 包时才应传 `source_ros=False`。
 
 ## 新增启动顺序
 

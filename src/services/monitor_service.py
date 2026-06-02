@@ -18,7 +18,7 @@ from src.schemas.monitor import (
     RobotStatus,
     SystemInfo,
 )
-from src.services.zeromq_consumer import ZeroMQConsumer
+from src.services.robot_command_service import RobotCommandService
 
 # 组件 ID 到 Metadata 字段的映射
 _ARM_FIELD_MAP = {
@@ -41,10 +41,10 @@ class MonitorService:
 
     def __init__(
         self,
-        consumer: ZeroMQConsumer,
+        command_service: RobotCommandService,
         poll_interval: int = 300,
     ):
-        self._consumer = consumer
+        self._command_service = command_service
         self._poll_interval = poll_interval
 
         # 缓存
@@ -223,7 +223,7 @@ class MonitorService:
     async def _refresh(self) -> bool:
         """查询 monitor 并更新缓存"""
         try:
-            data = await self._consumer.query_monitor()
+            data = await self._command_service.query_monitor()
             if not data:
                 logger.warning("monitor 查询返回空数据")
                 return False

@@ -81,13 +81,14 @@ class SequentialFlowRunner(QObject):
         self._spawned_names.clear()
         self._advance()
 
-    def stop(self) -> None:
+    def stop(self, *, stop_processes: bool = True) -> None:
         if self._stopped:
             return
         self._stopped = True
         self._cancel_waiters()
         self._disconnect_signals()
-        self._pm.stop_all(emergency=False)
+        if stop_processes:
+            self._pm.stop_all(emergency=False)
         self._emit(
             FlowEvent(
                 step_index=self._step_index,
@@ -213,11 +214,13 @@ class SequentialFlowRunner(QObject):
 
     def _do_gate(self, step: Step) -> None:
         fn = (step.extra or {}).get("fn")
-        gate_name = (step.extra or {}).get("gate")
-        if fn is None and isinstance(gate_name, str):
-            fn = self._ctx.extra.get(gate_name)
         if not callable(fn):
-            self._fail(step, "GATE 步骤缺少 extra['fn']")
+            gate_name = (step.extra or {}).get("name")
+            gate_handlers = self._ctx.extra.get("gate_handlers")
+            if isinstance(gate_name, str) and isinstance(gate_handlers, Mapping):
+                fn = gate_handlers.get(gate_name)
+        if not callable(fn):
+            self._fail(step, "GATE 步骤缺少 extra['fn'] 或已注册的 gate handler")
             return
         try:
             ok = bool(fn(self._ctx))

@@ -1,6 +1,6 @@
 """控制面板：顶部按钮栏 + 全局状态徽章 + 环境/启动方式切换。
 
-由旧 TopControlBar 平迁，Chip 复用 status_panel.StatusChip。
+由旧 TopControlBar 平迁，Chip 复用 status_chip.StatusChip。
 新增 display_name 标题字段，用于展示当前机型（CR4C / W1 ...）。
 """
 
@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton
 
-from desktop.widgets.status_panel import StatusChip
+from desktop.widgets.status_chip import StatusChip
 
 
 class ControlPanel(QFrame):

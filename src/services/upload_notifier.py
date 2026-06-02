@@ -3,8 +3,6 @@
 from datetime import datetime
 from pathlib import Path
 
-from loguru import logger
-
 from src.models.database import CollectionRecord
 from src.schemas.upload import CloudDataCreateRequest
 from src.services.cloud_client import CloudClient
@@ -23,20 +21,26 @@ class UploadNotifier:
         record: CollectionRecord,
         upload_start_time: datetime,
         upload_end_time: datetime,
+        *,
+        token: str | None = None,
     ) -> int | None:
-        """通知云端上传完成"""
-        if record.task_id is None:
-            logger.error(f"采集记录 {record.id} 缺少 task_id，跳过云端通知")
-            return None
+        """通知云端上传完成。
 
-        relative_path = ""
-        if record.output_dir:
-            output_path = Path(record.output_dir)
-            try:
-                relative_path = str(output_path.relative_to(self._storage_base))
-            except ValueError:
-                relative_path = output_path.name
-        remote_filepath = f"{self._remote_path}/{relative_path}" if relative_path else ""
+        成功时返回 cloud_id，失败时抛出异常供上层捕获并写入数据库。
+        """
+        if record.task_id is None:
+            raise ValueError(f"采集记录 {record.id} 缺少 task_id")
+        if not record.output_dir:
+            raise ValueError(f"采集记录 {record.id} 缺少 output_dir")
+
+        output_path = Path(record.output_dir).resolve()
+        try:
+            relative_path = str(output_path.relative_to(self._storage_base))
+        except ValueError as exc:
+            raise ValueError(
+                f"采集记录 {record.id} 输出目录不在存储根目录内: {output_path}"
+            ) from exc
+        remote_filepath = f"{self._remote_path}/{relative_path}"
 
         request_data = CloudDataCreateRequest(
             task_id=record.task_id,
@@ -48,4 +52,8 @@ class UploadNotifier:
             end_time=int(upload_end_time.timestamp()),
         )
 
-        return await self._cloud_client.create_data(request_data)
+        cloud_id = await self._cloud_client.create_data(request_data, token=token)
+        if cloud_id is None:
+            raise RuntimeError(f"云端返回空 cloud_id: record_id={record.id}")
+
+        return cloud_id

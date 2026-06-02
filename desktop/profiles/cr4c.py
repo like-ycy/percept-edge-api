@@ -5,8 +5,7 @@ from __future__ import annotations
 from desktop.adapters.api_adapter import ApiAdapter
 from desktop.adapters.can_adapter import CanAdapter
 from desktop.adapters.robot_os_adapter import RobotOsAdapter
-from desktop.adapters.ros_adapter import RosAdapter
-from desktop.adapters.vr_ros_adapter import VrRosAdapter
+from desktop.adapters.ros_adapter import RosAdapter, VrRosAdapter
 from desktop.flows.cr_flow import build_cr_flow
 from desktop.profiles.base import RobotProfile
 from desktop.profiles.registry import register
@@ -21,9 +20,9 @@ def _profile() -> RobotProfile:
             RosAdapter(role="core"),
             RosAdapter(role="slave"),
             RosAdapter(role="master"),
-            CanAdapter(),
             VrRosAdapter(role="arm"),
             VrRosAdapter(role="serial"),
+            CanAdapter(),
             RobotOsAdapter(),
             ApiAdapter(),
         ),

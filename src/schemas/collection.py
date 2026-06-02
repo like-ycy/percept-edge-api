@@ -7,6 +7,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from src.schemas.status import CollectionRecordStatus
+
 
 class CollectionStatusEnum(str, Enum):
     """采集状态枚举"""
@@ -18,16 +20,7 @@ class CollectionStatusEnum(str, Enum):
     ERROR = "error"
 
 
-class CollectionRecordStatusEnum(str, Enum):
-    """采集记录状态枚举"""
-
-    COLLECTING = "collecting"
-    FINALIZING = "finalizing"
-    VALIDATING = "validating"
-    COMPLETED = "completed"
-    ABORTED = "aborted"
-    FINALIZE_FAILED = "finalize_failed"
-    VALIDATION_FAILED = "validation_failed"
+CollectionRecordStatusEnum = CollectionRecordStatus
 
 
 class CollectionSession(BaseModel):
@@ -115,6 +108,8 @@ class ArmFrame:
     # eef_data（gripper_data 存在时取 eef_data[:-1]；null 保持为 None）
     eef: list[float] | None = None
     gripper: list[float] | None = None
+    translation: list[float] | None = None
+    tool_io_data: int | None = None
 
 
 @dataclass(slots=True)

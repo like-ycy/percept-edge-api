@@ -33,6 +33,8 @@ class CollectionRecordResponse(BaseModel):
     validation_status: str | None = None
     validation_summary: str | None = None
     upload_status: str
+    cloud_notify_status: str | None = None
+    cloud_notify_error: str | None = None
     upload_progress: int = 0
     materialize_progress: int = 0
     materialize_error: str | None = None

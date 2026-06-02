@@ -41,6 +41,7 @@ class SpoolManifest:
     robot_name: str = ""
     capture_mode: str = "standard"
     raw_frame_count: int = 0
+    dropped_frame_count: int = 0
     raw_bytes: int = 0
     segments: list[str] = field(default_factory=list)
 
@@ -53,6 +54,7 @@ class SpoolSealResult:
     manifest_path: Path
     sealed_at: datetime
     raw_frame_count: int
+    dropped_frame_count: int
     raw_bytes: int
     segment_files: list[Path]
 
@@ -217,27 +219,48 @@ class RawFrameSpoolWriter:
             raise RuntimeError("raw spool writer 已失败") from self._writer_error
 
         payload_size = len(payload)
+        drop_log_context: tuple[int | None, str, int, int, int, int, int, int] | None = None
+        should_drop = False
         with self._lock:
             if self._queued_bytes + payload_size > self._max_queue_bytes:
-                self._dropped_frames += 1
-                return False
-            if self._queue.full():
-                self._dropped_frames += 1
-                return False
-            self._queued_bytes += payload_size
-            self._queued_frames += 1
-            self._drained_event.clear()
+                should_drop = True
+                drop_log_context = self._record_drop_locked(
+                    reason="queued_bytes_exceeded",
+                    payload_size=payload_size,
+                )
+            elif self._queue.full():
+                should_drop = True
+                drop_log_context = self._record_drop_locked(
+                    reason="queue_full",
+                    payload_size=payload_size,
+                )
+
+            if not should_drop:
+                self._queued_bytes += payload_size
+                self._queued_frames += 1
+                self._drained_event.clear()
+
+        if should_drop:
+            if drop_log_context is not None:
+                self._log_dropped_frame(drop_log_context)
+            return False
 
         try:
             self._queue.put_nowait((payload, recv_ts_ns))
             return True
         except queue.Full:
+            drop_log_context = None
             with self._lock:
                 self._queued_bytes -= payload_size
                 self._queued_frames -= 1
-                self._dropped_frames += 1
+                drop_log_context = self._record_drop_locked(
+                    reason="queue_full_after_check",
+                    payload_size=payload_size,
+                )
                 if self._queued_frames == 0:
                     self._drained_event.set()
+            if drop_log_context is not None:
+                self._log_dropped_frame(drop_log_context)
             return False
 
     def stop_accepting(self) -> None:
@@ -266,9 +289,13 @@ class RawFrameSpoolWriter:
             raise RuntimeError("raw spool writer 写入失败") from self._writer_error
 
         sealed_at = end_time or now_shanghai()
+        written_frames = self.written_frames
+        dropped_frames = self.dropped_frames
+        written_bytes = self.written_bytes
         self._manifest.end_time = sealed_at.isoformat()
-        self._manifest.raw_frame_count = self.written_frames
-        self._manifest.raw_bytes = self.written_bytes
+        self._manifest.raw_frame_count = written_frames
+        self._manifest.dropped_frame_count = dropped_frames
+        self._manifest.raw_bytes = written_bytes
         self._manifest.segments = [path.name for path in self._segment_writer.segment_paths]
         self._write_manifest()
         self.sealed_path.write_text(sealed_at.isoformat(), encoding="utf-8")
@@ -277,16 +304,29 @@ class RawFrameSpoolWriter:
             capture_dir=self.capture_dir,
             manifest_path=self.manifest_path,
             sealed_at=sealed_at,
-            raw_frame_count=self.written_frames,
-            raw_bytes=self.written_bytes,
+            raw_frame_count=written_frames,
+            dropped_frame_count=dropped_frames,
+            raw_bytes=written_bytes,
             segment_files=self._segment_writer.segment_paths,
         )
         logger.info(
-            "raw spool 已 seal: record_id={}, frames={}, bytes={}",
+            "raw spool 已 seal: record_id={}, frames={}, dropped_frames={}, bytes={}",
             self._manifest.record_id,
-            self.written_frames,
-            self.written_bytes,
+            written_frames,
+            dropped_frames,
+            written_bytes,
         )
+        if dropped_frames > 0:
+            total_frames = written_frames + dropped_frames
+            drop_rate = dropped_frames / total_frames if total_frames > 0 else 0.0
+            logger.warning(
+                "raw spool 采集阶段存在丢帧: record_id={}, written_frames={}, "
+                "dropped_frames={}, drop_rate={:.1%}",
+                self._manifest.record_id,
+                written_frames,
+                dropped_frames,
+                drop_rate,
+            )
         return self._sealed_result
 
     def abort(self) -> None:
@@ -335,6 +375,53 @@ class RawFrameSpoolWriter:
             logger.exception("raw spool writer 线程异常退出")
         finally:
             self._segment_writer.close()
+
+    def _record_drop_locked(
+        self,
+        *,
+        reason: str,
+        payload_size: int,
+    ) -> tuple[int | None, str, int, int, int, int, int, int] | None:
+        self._dropped_frames += 1
+        if self._dropped_frames != 1 and self._dropped_frames % 100 != 0:
+            return None
+        return (
+            self._manifest.record_id,
+            reason,
+            self._dropped_frames,
+            self._queued_frames,
+            self._queued_bytes,
+            payload_size,
+            self._max_queue_bytes,
+            self._queue.maxsize,
+        )
+
+    @staticmethod
+    def _log_dropped_frame(
+        context: tuple[int | None, str, int, int, int, int, int, int],
+    ) -> None:
+        (
+            record_id,
+            reason,
+            dropped_frames,
+            queued_frames,
+            queued_bytes,
+            payload_size,
+            max_queue_bytes,
+            queue_capacity,
+        ) = context
+        logger.warning(
+            "raw spool 丢帧: record_id={}, reason={}, dropped_frames={}, queued_frames={}, "
+            "queued_bytes={}, payload_bytes={}, max_queue_bytes={}, queue_capacity={}",
+            record_id,
+            reason,
+            dropped_frames,
+            queued_frames,
+            queued_bytes,
+            payload_size,
+            max_queue_bytes,
+            queue_capacity,
+        )
 
     def _write_manifest(self) -> None:
         self.manifest_path.write_text(

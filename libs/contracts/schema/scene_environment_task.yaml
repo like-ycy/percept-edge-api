@@ -1,0 +1,259 @@
+version: "1.0"
+scenes:
+  - name: 桌面整理与收纳场景
+    description: "整个环境构建于一个多功能桌面操作空间中,
+      用于模拟人类在日常生活和工作中对桌面物体的整理、收纳、操作与清洁行为。场景以一张操作桌面为核心, 周围布置若干功能区域和物体类型,
+      包括饮品、文具、杯具、清洁工具及杂物收纳设施等。光照条件均匀、背景简洁, 确保物体边界清晰、操作区域明确。该综合环境支持多种交互模式与任务层次:
+      从单物体操作 (如抓取可乐、放入盒中), 到多物体整理 (如将散乱的笔或桌面物品分类归位), 再到复合动作与多步任务
+      (如清扫纸屑或收纳混合物体)。场景整体呈现为一个高度复合的桌面操作实验环境, 在统一的物理空间中覆盖多类任务主题, 既可独立分区运行,
+      也可连续执行多任务流程。"
+    environments:
+      - name: 桌面+可乐+马克笔+杯子+收纳盒+笔盒
+        description: 桌面上散乱放置若干可乐, 杯子和不同颜色的马克笔，可乐状态多样：瓶身状态包括直立、平放或倾斜；马克笔状态多样：笔身朝向随机（横放、斜放或竖立）；杯子可直立或平放；桌面上方居中位置有一个收纳盒和笔盒，互相挨着，左侧为收纳盒，右侧为笔盒；收纳盒和笔盒可在一定范围内进行位置微调
+        incompatible_envs: # 互斥环境组合列表，用于生成负样本。
+          - 桌面+可收纳物+垃圾+抽屉+垃圾桶
+          - 桌面+纸团+笤帚+簸箕
+          - 桌面+杯子+小球
+        tasks:
+          - name: 将蓝色马克笔放入整理架中
+            supported_robots:
+              - CR1
+          - name: 将红色马克笔放入整理架中
+            supported_robots:
+              - CR1
+          - name: 左臂抓取可乐并放置
+            supported_robots:
+              - CR1
+          - name: 将三个可乐放入盒中(盒子随机)
+            supported_robots:
+              - CR1
+          - name: 将一个可乐放入盒中
+            supported_robots:
+              - CR1
+          - name: 将黑色马克笔放入整理架中
+            supported_robots:
+              - CR1
+          - name: 将马克笔放入整理架中
+            supported_robots:
+              - CR1
+          - name: 将三个可乐放入盒中(修正)
+            supported_robots:
+              - CR1
+          - name: 将三个可乐放入盒中
+            supported_robots:
+              - CR1
+          - name: 将三个可乐放入盒中(片段传)
+            supported_robots:
+              - CR1
+          - name: 将三个可乐放入盒中(片段放)
+            supported_robots:
+              - CR1
+          - name: 将雪碧瓶放入盒中
+            supported_robots:
+              - CR1
+          - name: 将可乐直立放置
+            supported_robots:
+              - CR1
+          - name: 传递可乐
+            supported_robots:
+              - CR1
+          - name: 将马克笔放入整理架中(修正)
+            supported_robots:
+              - CR1
+          - name: 将两个可乐放入盒中
+            supported_robots:
+              - CR1
+          - name: 放置整理架并把马克笔放入整理架中
+            supported_robots:
+              - CR1
+          - name: 将直立的杯子倒置放入盒中
+            supported_robots:
+              - CR1
+          - name: 将平放的杯子倒置放入盒中
+            supported_robots:
+              - CR1
+          - name: 拿起杯子并将其杯口朝上直立放置
+            supported_robots:
+              - CR1
+      - name: 桌面+可收纳物+垃圾+抽屉+垃圾桶
+        description: 桌面上散乱放置着若干纸团和玩偶、水果、马克笔，桌面上方有一个抽屉，抽屉在桌面居中位置，抽屉朝向可向左或向右微调；桌子左下方有一个垃圾桶，用来给机械臂夹取纸团放置
+        incompatible_envs: # 互斥环境组合列表，用于生成负样本。
+          - 桌面+杯子+小球
+          - 桌面+纸团+笤帚+簸箕
+          - 桌面+可乐+马克笔+杯子+收纳盒+笔盒
+        tasks:
+          - name: 桌面整理-将桌面物品收纳进抽屉里
+            supported_robots:
+              - CR1
+          - name: 桌面整理-将桌面物品收纳进抽屉里(对抗)
+            supported_robots:
+              - CR1
+          - name: 桌面整理-将桌面物品收纳进抽屉里(修正)
+            supported_robots:
+              - CR1
+          - name: 桌面整理-将桌面垃圾放入垃圾桶里
+            supported_robots:
+              - CR1
+      - name: 桌面+杯子+小球
+        description: 桌面上放置若干杯子、一个开放的收纳盒、若干小球；杯子即小球位置随意摆放，收纳盒位置桌面居中，可一定范围内微调
+        incompatible_envs: # 互斥环境组合列表，用于生成负样本。
+          - 桌面+可收纳物+垃圾+抽屉+垃圾桶
+          - 桌面+纸团+笤帚+簸箕
+          - 桌面+可乐+马克笔+杯子+收纳盒+笔盒
+        tasks:
+          - name: 使用杯子传递小球
+            supported_robots:
+              - CR1
+      - name: 桌面+纸团+笤帚+簸箕
+        description: 桌面上放置着一个纸团、簸箕、扫帚；纸团位置桌面居中，可小范围调整；扫帚和簸箕分别在桌面左右两侧，可小范围调整
+        incompatible_envs: # 互斥环境组合列表，用于生成负样本。
+          - 桌面+可收纳物+垃圾+抽屉+垃圾桶
+          - 桌面+杯子+小球
+          - 桌面+可乐+马克笔+杯子+收纳盒+笔盒
+        tasks:
+          - name: 清扫桌面上的纸屑(修正)
+            supported_robots:
+              - CR1
+          - name: 清扫桌面上的纸屑
+            supported_robots:
+              - CR1
+  - name: 洗衣叠衣场景
+    description: "该场景构建于一个集成化的桌面操作实验环境中, 完整模拟从衣物收集、洗衣、叠衣到收纳的全流程家务行为。整体以一张操作桌面为核心,
+      周边划分为四大功能模块: 衣物收集区 (位于桌面一侧, 设有脏衣篮或散落衣物堆, 用于模拟日常使用后衣物的临时堆放)、洗衣区
+      (配置小型模拟洗衣机或衣物预处理台, 可对收集的衣物进行 “清洗” 状态标记或虚拟处理)、叠衣区 (桌面中央铺设防滑平整垫,
+      双臂机械臂在此协同完成衣物展平、对折、整形等操作, 支持 T 恤、衬衫、裤子等多类衣物的差异化折叠策略)、以及收纳区 (设置分类收纳盒、抽屉或挂架,
+      用于将折叠完成的衣物按类别或用途归位)。环境光照均匀、背景简洁, 确保衣物轮廓、材质与状态清晰可辨。系统支持端到端多阶段任务链:
+      从识别并抓取收集区的散乱衣物, 判断其类型与处理需求, 依次完成模拟洗涤、双臂协同折叠,
+      最终精准归入对应收纳单元。该场景强调任务间的逻辑衔接、状态感知与行为规划, 既可分段测试单一模块性能, 也可连续执行全流程,
+      为研究物体识别、多步任务规划、双臂协调控制及人机协作家务自动化提供高度复合、贴近真实生活的实验平台。"
+    environments:
+      - name: 桌面+衣服
+        description: 桌面上放置着一件或多件衣服，衣服状态多样：平铺或随机散乱摆放，衣服摆放：平铺时，可在桌面小范围内微调；随机摆放时，可在机械臂夹取范围内较大调整
+        tasks:
+          - name: 桌面叠衣(对抗)
+            supported_robots:
+              - CR1
+              - CR4a
+          - name: 桌面叠衣
+            supported_robots:
+              - CR1
+              - CR4a
+          - name: 桌面平铺衣服
+            supported_robots:
+              - CR1
+              - CR4a
+  - name: 超市货柜整理场景
+    description: 在一家现代化超市的饮料区，一排开放式金属货架整齐陈列着各类瓶装与罐装饮料。环境明亮、整洁，顾客可自由取放商品，当前任务由服务机器人执行自动化补货或分拣操作。
+    environments:
+      - name: 超市货柜+饮料
+        description: 标准超市双面饮料货架，层高适中，每层密集摆放未加外包装的瓶装和罐装饮料。周围有雪碧、芬达、矿泉水等其他饮料，颜色与形状相近，需准确识别。地面平整防滑，照明充足，无遮挡物。
+        tasks:
+          - name: 夹取瓶装可乐+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取瓶装可乐+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取瓶装可乐+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取瓶装雪碧+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取瓶装雪碧+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取瓶装雪碧+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取康师傅喝开水+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取康师傅喝开水+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取康师傅喝开水+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取冰糖雪梨+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取冰糖雪梨+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取冰糖雪梨+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取旺仔牛奶+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取旺仔牛奶+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取旺仔牛奶+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装雪碧+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装雪碧+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装雪碧+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装可乐+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装可乐+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取罐装可乐+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取金桔柠檬+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取金桔柠檬+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取金桔柠檬+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取怡宝+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取怡宝+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取怡宝+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取芬达+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取芬达+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取芬达+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取酸梅汤+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取酸梅汤+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取酸梅汤+上层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取农夫山泉矿泉水+下层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取农夫山泉矿泉水+中层+VR
+            supported_robots:
+              - CR4a
+          - name: 夹取农夫山泉矿泉水+上层+VR
+            supported_robots:
+              - CR4a
+

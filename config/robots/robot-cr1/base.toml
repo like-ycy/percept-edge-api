@@ -20,9 +20,46 @@ status_poll_interval = 0.2
 runtime_health_interval = 300.0
 ros_startup_grace = 3.0
 roscore_startup_grace = 2.0
-process_shutdown_grace = 5.0
-ros_shutdown_grace = 10.0
-force_kill_grace = 2.0
 ready_timeout = 30.0
 monitor_timeout = 0.5
 probe_interval = 1.0
+
+[[desktop.runtime.ros_commands]]
+name = "roscore"
+log_label = "SYS_PREP"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/follow1"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/follow1/devel/setup.bash"
+cmd = "roscore"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"
+
+[[desktop.runtime.ros_commands]]
+name = "ros_master1"
+log_label = "ROS_MASTER1"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master1"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master1/devel/setup.bash"
+cmd = "roslaunch arm_control L5.launch"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"
+
+[[desktop.runtime.ros_commands]]
+name = "ros_pos_follow1"
+log_label = "ROS_POS_FOLLOW1"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/pos_follow1"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/pos_follow1/devel/setup.bash"
+cmd = "roslaunch arm_control L5.launch"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"
+
+[[desktop.runtime.ros_commands]]
+name = "ros_master2"
+log_label = "ROS_MASTER2"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master2"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/master2/devel/setup.bash"
+cmd = "roslaunch arm_control L5.launch"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"
+
+[[desktop.runtime.ros_commands]]
+name = "ros_pos_follow2"
+log_label = "ROS_POS_FOLLOW2"
+cwd = "/home/agilex/workspaces/ros_env/robotic_arm_ws/pos_follow2"
+setup_script = "/home/agilex/workspaces/ros_env/robotic_arm_ws/pos_follow2/devel/setup.bash"
+cmd = "roslaunch arm_control L5.launch"
+path_prefix = "/home/agilex/miniconda3/envs/py310/bin"

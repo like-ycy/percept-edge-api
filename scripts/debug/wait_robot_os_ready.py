@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""等待 robot_os monitor 接口 ready。"""
+"""等待 robot_os command monitor 接口 ready。"""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _load_default_rep_endpoint() -> str:
+def _load_default_command_endpoint() -> str:
     sys.path.append(str(_repo_root()))
     from src.config import get_settings
 
-    return get_settings().zeromq.rep_endpoint
+    return get_settings().zeromq.command_endpoint
 
 
 def _read_positive_float_env(name: str, default: float) -> float:
@@ -37,8 +37,12 @@ def _read_positive_float_env(name: str, default: float) -> float:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="等待 robot_os monitor 接口 ready")
-    parser.add_argument("--rep-endpoint", default=None, help="ZeroMQ monitor REP 端点")
+    parser = argparse.ArgumentParser(description="等待 robot_os command monitor 接口 ready")
+    parser.add_argument(
+        "--command-endpoint",
+        default=None,
+        help="ZeroMQ command REQ/REP 端点",
+    )
     parser.add_argument("--ready-timeout", type=float, default=None, help="总等待超时（秒）")
     parser.add_argument(
         "--monitor-timeout", type=float, default=None, help="单次 monitor 超时（秒）"
@@ -52,8 +56,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    args.rep_endpoint = (
-        args.rep_endpoint or os.getenv("ROBOT_OS_REP_ENDPOINT") or _load_default_rep_endpoint()
+    args.command_endpoint = (
+        args.command_endpoint
+        or os.getenv("ROBOT_OS_COMMAND_ENDPOINT")
+        or _load_default_command_endpoint()
     )
     args.ready_timeout = args.ready_timeout or _read_positive_float_env(
         "ROBOT_OS_READY_TIMEOUT", 30.0
@@ -67,7 +73,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def probe_monitor(rep_endpoint: str, timeout: float) -> bool:
+def probe_monitor(command_endpoint: str, timeout: float) -> bool:
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
     socket.setsockopt(zmq.LINGER, 0)
@@ -75,8 +81,8 @@ def probe_monitor(rep_endpoint: str, timeout: float) -> bool:
     poller.register(socket, zmq.POLLIN)
 
     try:
-        socket.connect(rep_endpoint)
-        socket.send(msgpack.packb({"cmd": "monitor"}))
+        socket.connect(command_endpoint)
+        socket.send(msgpack.packb({"cmd": "monitor", "params": {}}, use_bin_type=True))
         events = dict(poller.poll(int(timeout * 1000)))
         if socket not in events:
             return False
@@ -95,14 +101,14 @@ def probe_monitor(rep_endpoint: str, timeout: float) -> bool:
 
 
 def wait_until_ready(
-    rep_endpoint: str,
+    command_endpoint: str,
     ready_timeout: float,
     monitor_timeout: float,
     probe_interval: float,
 ) -> bool:
     deadline = time.monotonic() + ready_timeout
     while time.monotonic() < deadline:
-        if probe_monitor(rep_endpoint, monitor_timeout):
+        if probe_monitor(command_endpoint, monitor_timeout):
             return True
 
         remaining = deadline - time.monotonic()
@@ -120,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     ready = wait_until_ready(
-        rep_endpoint=args.rep_endpoint,
+        command_endpoint=args.command_endpoint,
         ready_timeout=args.ready_timeout,
         monitor_timeout=args.monitor_timeout,
         probe_interval=args.probe_interval,
@@ -128,14 +134,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if ready:
         if not args.quiet:
-            print(f"[wait_robot_os_ready] ready: {args.rep_endpoint}")
+            print(f"[wait_robot_os_ready] ready: {args.command_endpoint}")
         return 0
 
     if not args.quiet:
         print(
             (
                 "[wait_robot_os_ready] timeout: "
-                f"endpoint={args.rep_endpoint} ready_timeout={args.ready_timeout}s"
+                f"endpoint={args.command_endpoint} ready_timeout={args.ready_timeout}s"
             ),
             file=sys.stderr,
         )

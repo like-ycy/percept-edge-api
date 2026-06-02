@@ -1,3 +1,0 @@
-[submodule "libs/contracts"]
-	path = libs/contracts
-	url = ssh://git@gitlab.ainnovation.com:58320/embodied_ai/contracts.git

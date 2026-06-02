@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""持续监控 robot_os monitor 链路。"""
+"""持续监控 robot_os command monitor 链路。"""
 
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _load_default_rep_endpoint() -> str:
+def _load_default_command_endpoint() -> str:
     sys.path.append(str(_repo_root()))
     from src.config import get_settings
 
-    return get_settings().zeromq.rep_endpoint
+    return get_settings().zeromq.command_endpoint
 
 
 def _read_positive_float_env(name: str, default: float) -> float:
@@ -47,8 +47,12 @@ def _read_positive_int_env(name: str, default: int) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="持续监控 robot_os monitor 链路")
-    parser.add_argument("--rep-endpoint", default=None, help="ZeroMQ monitor REP 端点")
+    parser = argparse.ArgumentParser(description="持续监控 robot_os command monitor 链路")
+    parser.add_argument(
+        "--command-endpoint",
+        default=None,
+        help="ZeroMQ command REQ/REP 端点",
+    )
     parser.add_argument(
         "--monitor-timeout",
         type=float,
@@ -70,8 +74,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    args.rep_endpoint = (
-        args.rep_endpoint or os.getenv("ROBOT_OS_REP_ENDPOINT") or _load_default_rep_endpoint()
+    args.command_endpoint = (
+        args.command_endpoint
+        or os.getenv("ROBOT_OS_COMMAND_ENDPOINT")
+        or _load_default_command_endpoint()
     )
     args.monitor_timeout = args.monitor_timeout or _read_positive_float_env(
         "ROBOT_OS_MONITOR_TIMEOUT", 2.0
@@ -95,7 +101,7 @@ class StopSignal:
 
 def watch_link(
     *,
-    rep_endpoint: str,
+    command_endpoint: str,
     monitor_timeout: float,
     watch_interval: float,
     failure_threshold: int,
@@ -110,13 +116,13 @@ def watch_link(
     consecutive_failures = 0
     link_down = False
     if not quiet:
-        print(f"[watch_robot_os_link] started: {rep_endpoint}", flush=True)
+        print(f"[watch_robot_os_link] started: {command_endpoint}", flush=True)
 
     while not stop_signal.received:
-        ready = probe_monitor(rep_endpoint, monitor_timeout)
+        ready = probe_monitor(command_endpoint, monitor_timeout)
         if ready:
             if link_down and not quiet:
-                print(f"[watch_robot_os_link] recovered: {rep_endpoint}", flush=True)
+                print(f"[watch_robot_os_link] recovered: {command_endpoint}", flush=True)
             consecutive_failures = 0
             link_down = False
         else:
@@ -127,7 +133,7 @@ def watch_link(
                     print(
                         (
                             "[watch_robot_os_link] link down: "
-                            f"endpoint={rep_endpoint} failures={consecutive_failures}"
+                            f"endpoint={command_endpoint} failures={consecutive_failures}"
                         ),
                         file=sys.stderr,
                         flush=True,
@@ -154,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, stop_signal.mark_received)
 
     return watch_link(
-        rep_endpoint=args.rep_endpoint,
+        command_endpoint=args.command_endpoint,
         monitor_timeout=args.monitor_timeout,
         watch_interval=args.watch_interval,
         failure_threshold=args.failure_threshold,

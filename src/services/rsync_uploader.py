@@ -3,10 +3,12 @@
 import asyncio
 import re
 from pathlib import Path
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.path_validator import PathValidationError, validate_safe_path
+from src.schemas.upload import UploadStatus
 from src.services.upload_progress_store import UploadProgressStore
 from src.services.upload_record_store import UploadRecordStore
 
@@ -35,7 +37,14 @@ class RsyncUploader:
         self._progress_store = progress_store
         self._record_store = record_store
 
-    async def upload(self, local_path: str, record_id: int, db: AsyncSession) -> None:
+    async def upload(
+        self,
+        local_path: str,
+        record_id: int,
+        db: AsyncSession,
+        *,
+        local_files: Optional[list[str]] = None,
+    ) -> None:
         """执行 rsync 上传并更新进度"""
         if not self._remote_host or not self._remote_path:
             raise RuntimeError("未配置远程主机或路径")
@@ -54,7 +63,13 @@ class RsyncUploader:
 
         ssh_key_path = self._resolve_ssh_key_path()
         remote_full_path = self._build_remote_path(validated_path)
-        cmd = self._build_rsync_command(validated_path, remote_full_path, ssh_key_path)
+        validated_files = self._validate_local_files(validated_path, local_files)
+        cmd = self._build_rsync_command(
+            validated_path,
+            remote_full_path,
+            ssh_key_path,
+            validated_files=validated_files,
+        )
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -85,7 +100,9 @@ class RsyncUploader:
                 raise RuntimeError(f"rsync 失败: {stderr.decode()}")
         except asyncio.CancelledError:
             self._progress_store.mark_interrupted(record_id)
-            await self._record_store.update_upload_status(record_id, "interrupted", db)
+            await self._record_store.update_upload_status(
+                record_id, UploadStatus.INTERRUPTED.value, db
+            )
             if proc.returncode is None:
                 proc.terminate()
                 try:
@@ -95,7 +112,7 @@ class RsyncUploader:
                     await proc.wait()
             raise
 
-    def _resolve_ssh_key_path(self) -> Path | None:
+    def _resolve_ssh_key_path(self) -> Optional[Path]:
         """解析 SSH 密钥路径"""
         if not self._ssh_key:
             return None
@@ -116,8 +133,42 @@ class RsyncUploader:
             relative_path = validated_path.name
         return f"{self._remote_path}/{relative_path}"
 
+    def _validate_local_files(
+        self, base_path: Path, local_files: Optional[list[str]]
+    ) -> Optional[list[Path]]:
+        """校验待上传成品文件列表。"""
+        if local_files is None:
+            return None
+        if not local_files:
+            raise RuntimeError("待上传成品文件列表为空")
+
+        validated_files: list[Path] = []
+        for local_file in local_files:
+            file_path = Path(local_file)
+            if not file_path.is_absolute():
+                file_path = base_path / file_path
+            try:
+                validated_file = validate_safe_path(
+                    file_path,
+                    allowed_base=base_path,
+                    allow_relative=False,
+                )
+            except PathValidationError as exc:
+                raise RuntimeError(f"上传文件路径验证失败: {exc}") from exc
+            if not validated_file.exists() or not validated_file.is_file():
+                raise RuntimeError(f"上传文件不存在或不是普通文件: {validated_file}")
+            if validated_file.parent != base_path:
+                raise RuntimeError(f"上传文件必须位于输出目录顶层: {validated_file}")
+            validated_files.append(validated_file)
+        return validated_files
+
     def _build_rsync_command(
-        self, validated_path: Path, remote_full_path: str, ssh_key_path: Path | None
+        self,
+        validated_path: Path,
+        remote_full_path: str,
+        ssh_key_path: Optional[Path],
+        *,
+        validated_files: Optional[list[Path]] = None,
     ) -> list[str]:
         """构建 rsync 命令"""
         cmd = [
@@ -125,6 +176,7 @@ class RsyncUploader:
             "-av",
             "--info=progress2",
             "--mkpath",
+            "--exclude=.capture/",
             "--no-compress",
             "--whole-file",
             "--inplace",
@@ -139,10 +191,15 @@ class RsyncUploader:
                 ]
             )
 
-        cmd.extend(
-            [
-                f"{validated_path}/",
-                f"{self._remote_user}@{self._remote_host}:{remote_full_path}",
-            ]
-        )
+        if validated_files is None:
+            cmd.extend(
+                [
+                    f"{validated_path}/",
+                    f"{self._remote_user}@{self._remote_host}:{remote_full_path}",
+                ]
+            )
+            return cmd
+
+        cmd.extend(str(file_path) for file_path in validated_files)
+        cmd.append(f"{self._remote_user}@{self._remote_host}:{remote_full_path}/")
         return cmd

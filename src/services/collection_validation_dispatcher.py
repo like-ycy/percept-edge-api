@@ -5,7 +5,7 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 from sqlalchemy import select
@@ -213,7 +213,7 @@ class CollectionValidationDispatcher:
             )
             return await validator.validate_video_only_collection(
                 output_dir,
-                expected_frames=record.frame_count,
+                expected_frames=self._resolve_expected_frame_count(record),
             )
 
         if not self._monitor_service:
@@ -232,7 +232,64 @@ class CollectionValidationDispatcher:
         validator = DataIntegrityValidator(
             self._monitor_service, frame_drop_threshold=self._frame_drop_threshold
         )
-        return await validator.validate_collection(output_dir)
+        return await validator.validate_collection(
+            output_dir,
+            expected_frames=self._resolve_expected_frame_count(record),
+        )
+
+    @staticmethod
+    def _resolve_expected_frame_count(record: CollectionRecord) -> int:
+        candidates = [record.frame_count, record.raw_frame_count]
+        wall_clock_frames = CollectionValidationDispatcher._resolve_wall_clock_expected_frames(
+            record
+        )
+        if wall_clock_frames is not None:
+            candidates.append(wall_clock_frames)
+        return max(candidates)
+
+    @staticmethod
+    def _resolve_wall_clock_expected_frames(record: CollectionRecord) -> Optional[int]:
+        if record.start_time is None or record.end_time is None:
+            return None
+
+        elapsed_seconds = CollectionValidationDispatcher._elapsed_seconds(
+            record.start_time,
+            record.end_time,
+        )
+        if elapsed_seconds <= 0:
+            return None
+
+        fps = CollectionValidationDispatcher._resolve_record_fps(record)
+        return max(int(elapsed_seconds * fps), 0)
+
+    @staticmethod
+    def _elapsed_seconds(start_time: datetime, end_time: datetime) -> float:
+        if (start_time.tzinfo is None) != (end_time.tzinfo is None):
+            start_time = start_time.replace(tzinfo=None)
+            end_time = end_time.replace(tzinfo=None)
+        return (end_time - start_time).total_seconds()
+
+    @staticmethod
+    def _resolve_record_fps(record: CollectionRecord) -> int:
+        if not record.raw_capture_dir:
+            return 30
+
+        manifest_path = Path(record.raw_capture_dir) / "manifest.json"
+        if not manifest_path.exists():
+            return 30
+
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.warning("读取采集 manifest 失败，按 30fps 计算期望帧数: {}", manifest_path)
+            return 30
+
+        fps = manifest.get("fps")
+        if isinstance(fps, bool):
+            return 30
+        if isinstance(fps, int) and fps > 0:
+            return fps
+        return 30
 
     @staticmethod
     def _is_video_only_record(record: CollectionRecord) -> bool:

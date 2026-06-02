@@ -1,6 +1,6 @@
 """Profile 注册表。
 
-机型实现文件（cr1.py / cr4a.py / cr4c.py / w1.py）通过 @register 注册自身工厂，
+机型实现文件（cr1.py / cr4a.py / cr4c.py / cr5.py / w1.py）通过 @register 注册自身工厂，
 load_profile 根据 PERCEPT_ROBOT 环境变量或显式参数返回对应 RobotProfile。
 """
 

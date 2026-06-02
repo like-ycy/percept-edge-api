@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>批量补偿上传</title>
+  <link rel="stylesheet" href="assets/vercel-redesign.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><title>percept-static</title><path d="M4 4h16v16H4z"></path><path d="M8 8h8v8H8z"></path></svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-title">percept-static</span>
+            <span class="brand-subtitle">批量补偿上传</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="页面导航">
+          <a href="index.html">入口</a>
+          <a class="active" href="redesign-upload-reconcile.html">补偿上传</a>
+          <a href="redesign-collection.html">数据采集</a>
+          <a href="redesign-monitor.html">系统监控</a>
+          <a href="redesign-processes.html">进程监控</a>
+          <a href="redesign-unlock.html">采集锁</a>
+          <a href="redesign-raw-info.html">原始数据</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container page">
+      <a class="backlink" href="index.html">← 返回入口</a>
+      <section class="hero">
+        <div class="hero-stack">
+          <div class="eyebrow">POST /api/upload/reconcile-cloud-notify</div>
+          <h1>批量补偿上传</h1>
+          <p class="lead">云端通知补偿 · 已上传记录登记修复</p>
+        </div>
+        <div class="summary-strip">
+          <div class="static-auth-status" data-static-auth-status></div>
+        </div>
+      </section>
+
+      <div class="layout">
+        <main class="stack">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>一键补偿已上传但未登记云端的数据</h2>
+              <span class="badge">确认后执行</span>
+            </div>
+            <div class="panel-body stack">
+              <p class="muted">
+                此页面会扫描当前登录用户下已经 rsync 上传完成、但缺少 cloud_id 的采集记录，
+                并重新调度云端登记通知。它不会重复发起 rsync 文件上传，只补偿云端数据登记步骤。
+              </p>
+              <label class="callout" for="confirmCheck">
+                <input type="checkbox" id="confirmCheck">
+                <span>我确认当前边端服务连接的是目标环境，并理解本操作会批量调度所有符合条件的云端通知补偿任务。</span>
+              </label>
+              <div class="actions">
+                <button type="button" id="reconcileBtn" class="btn primary" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>开始批量补偿</title><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path></svg>
+                  开始批量补偿
+                </button>
+                <button type="button" id="clearResultBtn" class="btn">清空结果</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="resultCard">
+            <div class="panel-header">
+              <h2>补偿结果</h2>
+            </div>
+            <div class="panel-body stack">
+              <div class="metric-grid">
+                <div class="metric">
+                  <div class="metric-label">已调度成功</div>
+                  <div class="metric-value" id="successCount">0</div>
+                  <div class="metric-sub">success</div>
+                </div>
+                <div class="metric">
+                  <div class="metric-label">调度失败</div>
+                  <div class="metric-value" id="failedCount">0</div>
+                  <div class="metric-sub">failed</div>
+                </div>
+              </div>
+              <div class="grid two">
+                <div>
+                  <h3>成功记录 ID</h3>
+                  <pre id="successIds">无</pre>
+                </div>
+                <div>
+                  <h3>失败记录 ID</h3>
+                  <pre id="failedIds">无</pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>运行日志</h2>
+            </div>
+            <div class="panel-body">
+              <div class="terminal log" id="log"></div>
+            </div>
+          </section>
+        </main>
+
+        <aside class="stack">
+          <section class="card">
+            <div class="card-title">
+              <h2>补偿范围</h2>
+            </div>
+            <ul class="list">
+              <li>仅处理当前登录用户自己的记录。</li>
+              <li><code>upload_status</code> 必须为 <code>completed</code>。</li>
+              <li><code>cloud_id</code> 必须为空，表示还未登记云端。</li>
+              <li><code>cloud_notify_status</code> 不能是 <code>notifying</code>。</li>
+              <li>记录必须存在 <code>task_id</code> 和 <code>output_dir</code>。</li>
+            </ul>
+          </section>
+
+          <section class="card">
+            <div class="card-title">
+              <h2>环境说明</h2>
+            </div>
+            <ul class="list">
+              <li>默认登录环境：<code>prod · 192.168.21.139</code>。</li>
+              <li>可在统一登录弹窗切换到 <code>test · 192.168.21.138</code>。</li>
+              <li>登录 API 根据环境切换；补偿 API 使用当前边端服务地址。</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script src="assets/static-auth.js"></script>
+  <script src="assets/redesign-upload-reconcile.js"></script>
+</body>
+</html>

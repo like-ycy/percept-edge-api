@@ -5,49 +5,16 @@ debug = false
 
 [zeromq]
 endpoint = "ipc:///tmp/robotos_collection"
+# deprecated: monitor 查询已迁移到 command_endpoint，保留 rep_endpoint 仅兼容旧部署配置
 rep_endpoint = "ipc:///tmp/robotos_monitor"
+command_endpoint = "ipc:///tmp/robotos_command"
+enable_runtime_watchdog = true
+stale_threshold_seconds = 5.0
+watchdog_interval_seconds = 1.0
+startup_grace_seconds = 5.0
 
 [webrtc]
 stun_server = "stun:127.0.0.1:19302"
-
-[webrtc.preview]
-enabled = true
-max_width = 1920
-max_height = 540
-max_fps = 15.0
-fallback_width = 640
-fallback_height = 360
-max_encoded_frame_bytes = 16777216
-
-[webrtc.codec]
-enabled = true
-preferred = ["video/H264", "video/VP8"]
-
-[webrtc.preview.adaptive]
-enabled = false
-check_interval_seconds = 5.0
-cooldown_seconds = 15.0
-decode_ms_high = 30.0
-recv_ms_high = 50.0
-reuse_ratio_high = 0.5
-
-[[webrtc.preview.adaptive.profiles]]
-name = "high"
-max_width = 1920
-max_height = 540
-max_fps = 15.0
-
-[[webrtc.preview.adaptive.profiles]]
-name = "medium"
-max_width = 1280
-max_height = 360
-max_fps = 12.0
-
-[[webrtc.preview.adaptive.profiles]]
-name = "low"
-max_width = 960
-max_height = 270
-max_fps = 10.0
 
 [upload]
 remote_port = 22
@@ -72,10 +39,10 @@ whitelist_paths = [
     "/api/collection/lock/status",
     "/api/collection/lock/release",
     "/api/upload/active",
+    "/api/desktop/lift/height",
     "/api/storage/raw-info",
     "/debug/zeromq",
-    "/debug/processes",
-    "/debug/webrtc"
+    "/debug/processes"
 ]
 
 [auth.iam]
@@ -101,3 +68,13 @@ enabled = true
 sample_interval_seconds = 60.0
 refresh_window_seconds = 0.5
 cmdline_max_length = 200
+
+[desktop.runtime]
+process_shutdown_grace = 5.0
+ros_shutdown_grace = 8.0
+sigterm_shutdown_grace = 5.0
+api_shutdown_grace = 60.0
+force_kill_grace = 2.0
+
+[robot_control.electromagnet]
+enabled = false

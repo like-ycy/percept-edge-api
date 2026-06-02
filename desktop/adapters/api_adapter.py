@@ -25,10 +25,11 @@ class ApiAdapter(Adapter):
             shell=True,
             shutdown_signal=int(_signal.SIGTERM),
             shutdown_grace=cfg.process_shutdown_grace,
-            shutdown_sequence=(
-                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.process_shutdown_grace),
-            ),
             force_kill_grace=cfg.force_kill_grace,
+            shutdown_sequence=(
+                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.api_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGKILL), grace=cfg.force_kill_grace),
+            ),
         )
 
     def build_probe(self, ctx: BuildContext) -> Optional[HealthProbe]:

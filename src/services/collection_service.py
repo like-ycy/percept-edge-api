@@ -19,6 +19,7 @@ from src.core.path_validator import sanitize_filename
 from src.models.database import CollectionRecord, now_shanghai, Task
 from src.schemas.auth import UserInfo
 from src.schemas.collection import CollectionSession, CollectionStatusEnum
+from src.schemas.status import TaskStatus
 from src.services.collection_materialization_dispatcher import CollectionMaterializationDispatcher
 from src.services.collection_record_store import CollectionRecordStore
 from src.services.collection_validation_dispatcher import CollectionValidationDispatcher
@@ -141,11 +142,11 @@ class CollectionService:
             task = result.scalar_one_or_none()
             if not task:
                 raise BusinessError(f"任务不存在: task_id={task_id}")
-            if task.status not in ["run", "pending"]:
+            if task.status not in (TaskStatus.RUNNING.value, TaskStatus.PENDING.value):
                 raise BusinessError(
                     f"任务状态不是 run 或 pending，无法开始采集: 当前状态={task.status}"
                 )
-            if task.status == "completed":
+            if task.status == TaskStatus.COMPLETED.value:
                 raise BusinessError("任务已完成，无法重新采集")
 
             if self._video_only:
@@ -256,13 +257,13 @@ class CollectionService:
 
         if self._monitor_service is None:
             logger.error("开始采集失败: MonitorService 未配置")
-            raise BusinessError("无法获取采集数据，请检查 robotos_monitor 数据流")
+            raise BusinessError("无法获取采集数据，请检查 robotos_command monitor 命令")
 
         system_info = self._monitor_service.get_system_info()
         robot_status = self._monitor_service.get_robot_status()
         if system_info is None or robot_status is None:
-            logger.error("开始采集失败: robotos_monitor 无有效数据")
-            raise BusinessError("无法获取采集数据，请检查 robotos_monitor 数据流")
+            logger.error("开始采集失败: robotos_command monitor 命令无有效数据")
+            raise BusinessError("无法获取采集数据，请检查 robotos_command monitor 命令")
 
     async def stop_collection(self, db: AsyncSession) -> CollectionSession:
         if not self._collecting:
@@ -296,10 +297,12 @@ class CollectionService:
             seal_time = now_shanghai()
             seal_result = await asyncio.to_thread(self._spool_writer.seal, seal_time)
             logger.info(
-                "停止采集 seal 完成: task_id={}, record_id={}, frames={}, bytes={}, duration_ms={:.1f}",
+                "停止采集 seal 完成: task_id={}, record_id={}, frames={}, dropped_frames={}, "
+                "bytes={}, duration_ms={:.1f}",
                 self._session.task_id,
                 self._record_id,
                 seal_result.raw_frame_count,
+                seal_result.dropped_frame_count,
                 seal_result.raw_bytes,
                 (perf_counter() - seal_started_at) * 1000,
             )
@@ -319,7 +322,7 @@ class CollectionService:
             )
 
             if record.task_id:
-                await self._update_task_progress(db, record.task_id)
+                await self._update_task_progress(db, record)
 
             scheduled = self.schedule_materialization(record.id)
             if scheduled:
@@ -404,8 +407,8 @@ class CollectionService:
         self._reset_runtime_state()
         logger.warning("采集资源清理完成")
 
-    async def _update_task_progress(self, db: AsyncSession, task_id: int) -> None:
-        await self._record_store.update_task_progress(db, task_id)
+    async def _update_task_progress(self, db: AsyncSession, record: CollectionRecord) -> None:
+        await self._record_store.count_task_progress_once(db, record)
 
     def _mark_session_error(self, exc: Exception) -> None:
         if self._session is None:

@@ -8,6 +8,7 @@ from loguru import logger
 from src.core.sync_throttle import SyncThrottle
 from src.models.database import Task
 from src.repositories.task_repo import TaskRepository
+from src.schemas.status import TaskStatus
 from src.schemas.task import SyncResult, TaskFilter, TaskFilterOptions
 from src.services.cloud_client import CloudClient
 from src.services.task_converter import cloud_detail_to_model
@@ -114,8 +115,11 @@ class TaskService:
 
         for detail in details:
             model_data = cloud_detail_to_model(detail)
-            if model_data.get("progress") == 0 and model_data.get("status") == "run":
-                model_data["status"] = "pending"
+            if (
+                model_data.get("progress") == 0
+                and model_data.get("status") == TaskStatus.RUNNING.value
+            ):
+                model_data["status"] = TaskStatus.PENDING.value
 
             existing = await self.repo.get_by_cloud_task_id(detail.id, include_deleted=True)
             if existing is not None:
@@ -143,7 +147,10 @@ class TaskService:
     def _resolve_synced_status(local_progress: int, repeat: int, cloud_status: str) -> str:
         """合并云端状态与本地采集进度，避免已采集任务被刷回 pending。"""
         if repeat > 0 and local_progress >= repeat:
-            return "completed"
-        if local_progress > 0 and cloud_status in {"pending", "run"}:
-            return "run"
+            return TaskStatus.COMPLETED.value
+        if local_progress > 0 and cloud_status in {
+            TaskStatus.PENDING.value,
+            TaskStatus.RUNNING.value,
+        }:
+            return TaskStatus.RUNNING.value
         return cloud_status

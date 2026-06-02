@@ -14,6 +14,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.core.path_validator import PathValidationError, validate_safe_path
 from libs.contracts.schema.episode_dataclass import Metadata
 from src.models.database import CollectionRecord, Task
 from src.schemas.collection import CollectionRecordStatusEnum
@@ -50,13 +51,39 @@ class CollectionMaterializer:
         self._record_store = record_store or CollectionRecordStore()
         self._pending_progress_tasks: set[asyncio.Task[None]] = set()
 
+    @staticmethod
+    def _validate_output_dir(output_dir: str) -> Path:
+        try:
+            return validate_safe_path(output_dir, allow_relative=False)
+        except PathValidationError as exc:
+            raise ValueError(f"output_dir 路径非法: {exc}") from exc
+
+    @classmethod
+    def _validate_capture_dir(cls, raw_capture_dir: str, output_dir: str | None) -> Path:
+        allowed_base = cls._validate_output_dir(output_dir) if output_dir else None
+        try:
+            return validate_safe_path(
+                raw_capture_dir,
+                allowed_base=allowed_base,
+                allow_relative=False,
+            )
+        except PathValidationError as exc:
+            raise ValueError(f"raw spool 路径非法: {exc}") from exc
+
     async def materialize(self, record_id: int) -> bool:
         started_at = perf_counter()
         context = await self._load_context(record_id)
         if context is None:
             return False
 
-        manifest_path = context.raw_capture_dir / "manifest.json"
+        capture_dir = self._validate_capture_dir(
+            str(context.raw_capture_dir), str(context.output_dir)
+        )
+        manifest_path = capture_dir / "manifest.json"
+        sealed_path = capture_dir / "SEALED"
+        if not sealed_path.exists():
+            await self._mark_failed(record_id, f"raw spool 未 seal: {sealed_path}")
+            return False
         if not manifest_path.exists():
             await self._mark_failed(record_id, f"manifest 不存在: {manifest_path}")
             return False
@@ -131,10 +158,16 @@ class CollectionMaterializer:
                 )
                 task_instructions = deserialize_instructions(task_result.scalar_one_or_none())
 
+            validated_output_dir = self._validate_output_dir(record.output_dir)
+            validated_capture_dir = self._validate_capture_dir(
+                record.raw_capture_dir,
+                record.output_dir,
+            )
+
             return MaterializeContext(
                 record_id=record.id,
-                output_dir=Path(record.output_dir),
-                raw_capture_dir=Path(record.raw_capture_dir),
+                output_dir=validated_output_dir,
+                raw_capture_dir=validated_capture_dir,
                 user_name=record.user_name,
                 raw_frame_count=record.raw_frame_count,
                 collection_status=record.collection_status,
@@ -229,11 +262,27 @@ class CollectionMaterializer:
             Path(file_path).stat().st_size for file_path in files if Path(file_path).exists()
         )
         frame_count = recorder.step_count
+        skipped_frames = max(total_records - frame_count, 0)
+        drop_rate = skipped_frames / total_records if total_records > 0 else 0.0
+        if skipped_frames > 0:
+            logger.warning(
+                "整理阶段检测到丢帧: record_id={}, raw_frames={}, recorded_frames={}, "
+                "skipped_frames={}, drop_rate={:.1%}",
+                context.record_id,
+                total_records,
+                frame_count,
+                skipped_frames,
+                drop_rate,
+            )
         duration = (frame_count + max(fps - 1, 0)) // fps if fps > 0 else 0
         logger.info(
-            "整理阶段文件收集完成: record_id={}, files={}, total_sync_duration_ms={:.1f}",
+            "整理阶段文件收集完成: record_id={}, files={}, raw_frames={}, recorded_frames={}, "
+            "skipped_frames={}, total_sync_duration_ms={:.1f}",
             context.record_id,
             len(files),
+            total_records,
+            frame_count,
+            skipped_frames,
             (perf_counter() - started_at) * 1000,
         )
         return {

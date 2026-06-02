@@ -3,6 +3,7 @@
 import math
 import os
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,8 @@ from src.schemas.storage import (
     PaginatedCollectionRecordResponse,
     StorageFilterOptions,
 )
+from src.schemas.upload import UploadStatus
+from src.schemas.validation import ValidationStatusEnum
 from src.services.cloud_client import CloudClient
 from src.services.collection_service import CollectionService
 from src.services.raw_capture_inspector import inspect_raw_capture
@@ -115,15 +118,15 @@ async def delete_file_record(
     """删除采集记录。"""
     record = await service.get_record_by_id(record_id=record_id, user_id=user.user_id)
 
-    if record.upload_status == "uploading":
+    if record.upload_status == UploadStatus.UPLOADING.value:
         raise BusinessError("数据正在上传中，暂不可以删除")
 
-    if record.cloud_id is None:
-        raise BusinessError("数据尚未上传完成，缺少 cloud_id，暂不可以删除")
-
-    deleted = await cloud_client.delete_data(record.cloud_id)
-    if not deleted:
-        raise ExternalServiceError("CloudAPI", f"删除云端记录失败: cloud_id={record.cloud_id}")
+    if record.cloud_id is not None:
+        deleted = await cloud_client.delete_data(record.cloud_id)
+        if not deleted:
+            raise ExternalServiceError("CloudAPI", f"删除云端记录失败: cloud_id={record.cloud_id}")
+    elif record.validation_status == ValidationStatusEnum.SUCCESS.value:
+        raise BusinessError("数据尚未同步云端，暂不可以删除")
 
     service.remove_local_record_data(record)
 
@@ -149,7 +152,7 @@ async def get_raw_capture_info(
     context = get_app_context(request.app)
     storage_root = Path(context.settings.storage.base_path).resolve()
 
-    raw_raw: str | None = record.raw_capture_dir
+    raw_raw: Optional[str] = record.raw_capture_dir
     if not raw_raw and record.output_dir:
         raw_raw = str(Path(record.output_dir) / ".capture")
 

@@ -54,6 +54,21 @@ def _parse_gripper_value(frame_data) -> list[float] | None:
     return None
 
 
+def _parse_float_list(value) -> list[float] | None:
+    if value is None:
+        return None
+    if isinstance(value, list | tuple):
+        values: list[float] = []
+        for item in value:
+            if isinstance(item, bool) or not isinstance(item, int | float):
+                return None
+            values.append(float(item))
+        return values
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return [float(value)]
+
+
 def _parse_bytes_field(value) -> bytes | None:
     if value is None:
         return None
@@ -69,6 +84,16 @@ def _parse_bytes_field(value) -> bytes | None:
             except (ValueError, SyntaxError):
                 pass
         return value.encode() if value else None
+    return None
+
+
+def _parse_tool_io_data(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
     return None
 
 
@@ -116,6 +141,8 @@ def parse_zmq_message(
                         joint_force=joint.get("joint_force", []),
                         eef=_parse_eef_values(eef, has_gripper_data),
                         gripper=_parse_gripper_value(frame_data),
+                        translation=_parse_float_list(frame_data.get("translation_data")),
+                        tool_io_data=_parse_tool_io_data(frame_data.get("tool_io_data")),
                     )
                 )
             finally:
@@ -146,9 +173,17 @@ def parse_zmq_message(
 class ZeroMQConsumer:
     """ZeroMQ 消费者，持续接收帧数据"""
 
-    def __init__(self, endpoint: str, rep_endpoint: str = "", collection_queue_size: int = 100):
+    def __init__(
+        self,
+        endpoint: str,
+        collection_queue_size: int = 100,
+        *,
+        enable_runtime_watchdog: bool = True,
+        stale_threshold_seconds: float = 5.0,
+        watchdog_interval_seconds: float = 1.0,
+        startup_grace_seconds: float = 5.0,
+    ):
         self.endpoint = endpoint
-        self.rep_endpoint = rep_endpoint
         self.context = zmq.asyncio.Context()
         self.socket = None
         self._latest_frame: ZmqFrame | None = None
@@ -156,11 +191,17 @@ class ZeroMQConsumer:
         self._collection_enabled = False
         self._running = False
         self._task: asyncio.Task | None = None
+        self._watchdog_task: asyncio.Task | None = None
         self._pause_request = False
         self._consumer_paused = asyncio.Event()
         self._collection_raw_sink: RawFrameSink | None = None
         self._collection_sink_failure_handler: CollectionSinkFailureHandler | None = None
         self._collection_sink_failed = False
+        self._enable_runtime_watchdog = enable_runtime_watchdog
+        self._stale_threshold_seconds = stale_threshold_seconds
+        self._watchdog_interval_seconds = watchdog_interval_seconds
+        self._startup_grace_seconds = startup_grace_seconds
+        self._stream_stale_logged = False
 
         self._frames_received = 0
         self._frames_processed = 0
@@ -179,9 +220,21 @@ class ZeroMQConsumer:
         self.socket.setsockopt(zmq.RCVHWM, 10)
         self.socket.connect(self.endpoint)
         self.socket.setsockopt_string(zmq.SUBSCRIBE, "")
+        self._latest_frame = None
+        self._last_receive_time = None
+        self._latest_frame_metadata = None
+        self._latest_parse_time_ms = 0.0
+        self._latest_frame_delay_ms = 0.0
+        self._frames_received = 0
+        self._frames_processed = 0
+        self._frames_dropped = 0
+        self._frames_flushed = 0
         self._running = True
         self._start_time = datetime.now(timezone.utc)
+        self._stream_stale_logged = False
         self._task = asyncio.create_task(self._consume_loop())
+        if self._enable_runtime_watchdog:
+            self._watchdog_task = asyncio.create_task(self._watchdog_loop())
 
     async def stop(self) -> None:
         self._running = False
@@ -189,6 +242,12 @@ class ZeroMQConsumer:
             self._task.cancel()
             try:
                 await self._task
+            except asyncio.CancelledError:
+                pass
+        if self._watchdog_task:
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
             except asyncio.CancelledError:
                 pass
         if self.socket:
@@ -271,6 +330,60 @@ class ZeroMQConsumer:
             except Exception as e:
                 logger.warning(f"ZeroMQ 帧处理异常: {type(e).__name__}: {e}")
                 continue
+
+    async def _watchdog_loop(self) -> None:
+        while self._running:
+            try:
+                await asyncio.sleep(self._watchdog_interval_seconds)
+                self._check_stream_watchdog(datetime.now(timezone.utc))
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.warning("ZeroMQ watchdog 检查异常: {}: {}", type(exc).__name__, exc)
+
+    def _check_stream_watchdog(self, now: datetime) -> None:
+        if not self._enable_runtime_watchdog or not self._running or self.socket is None:
+            return
+
+        if self._pause_request:
+            return
+
+        if self._start_time is None:
+            return
+
+        startup_elapsed = (now - self._start_time).total_seconds()
+        if startup_elapsed < self._startup_grace_seconds:
+            return
+
+        if self._last_receive_time is None:
+            if not self._stream_stale_logged:
+                logger.error(
+                    "ZeroMQ collection 启动后未收到任何数据: endpoint={}, grace={:.1f}s",
+                    self.endpoint,
+                    self._startup_grace_seconds,
+                )
+                self._stream_stale_logged = True
+            return
+
+        elapsed = (now - self._last_receive_time).total_seconds()
+        if elapsed > self._stale_threshold_seconds:
+            if not self._stream_stale_logged:
+                logger.error(
+                    "ZeroMQ collection 数据流中断: endpoint={}, elapsed={:.1f}s, threshold={:.1f}s",
+                    self.endpoint,
+                    elapsed,
+                    self._stale_threshold_seconds,
+                )
+                self._stream_stale_logged = True
+            return
+
+        if self._stream_stale_logged:
+            logger.info(
+                "ZeroMQ collection 数据流已恢复: endpoint={}, last_receive_time={}",
+                self.endpoint,
+                self._last_receive_time,
+            )
+            self._stream_stale_logged = False
 
     async def _handle_collection_sink_failure(self, exc: Exception) -> None:
         if self._collection_sink_failed:
@@ -355,35 +468,6 @@ class ZeroMQConsumer:
     def is_collection_enabled(self) -> bool:
         return self._collection_enabled
 
-    async def query_monitor(self) -> dict:
-        if not self.rep_endpoint:
-            logger.warning("未配置 ZeroMQ REP 端点，无法查询 monitor")
-            return {}
-
-        req_socket = self.context.socket(zmq.REQ)
-        req_socket.setsockopt(zmq.LINGER, 0)
-        req_socket.connect(self.rep_endpoint)
-        try:
-            await req_socket.send(msgpack.packb({"cmd": "monitor"}))
-            raw = await asyncio.wait_for(req_socket.recv(), timeout=5.0)
-            data = msgpack.unpackb(raw, raw=False)
-            if data.get("success"):
-                return data.get("data", {})
-            logger.warning(f"monitor 查询失败: {data.get('message')}")
-            return {}
-        except asyncio.TimeoutError:
-            logger.warning("monitor 查询超时")
-            return {}
-        except Exception as e:
-            logger.warning(f"monitor 查询异常: {e}")
-            return {}
-        finally:
-            req_socket.close()
-
-    async def query_robot_info(self) -> dict:
-        data = await self.query_monitor()
-        return data.get("robot", {}).get("metadata", {})
-
     def _extract_frame_metadata(self, frame: ZmqFrame) -> FrameMetadata:
         return FrameMetadata(
             timestamp=datetime.fromtimestamp(frame.timestamp, tz=timezone.utc),
@@ -395,9 +479,10 @@ class ZeroMQConsumer:
         )
 
     def get_debug_info(self) -> ZeroMQDebugInfo:
+        now = datetime.now(timezone.utc)
         uptime = 0.0
         if self._start_time:
-            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
+            uptime = (now - self._start_time).total_seconds()
 
         queue_size = self._collection_raw_sink.queued_frames if self._collection_raw_sink else 0
         queue_capacity = (
@@ -407,6 +492,19 @@ class ZeroMQConsumer:
         )
 
         fps = round(self._frames_received / uptime, 2) if uptime > 0 else 0.0
+        stale_seconds = None
+        if self._last_receive_time is not None:
+            stale_seconds = (now - self._last_receive_time).total_seconds()
+
+        is_stale = False
+        if self._enable_runtime_watchdog and self._start_time is not None:
+            startup_elapsed = (now - self._start_time).total_seconds()
+            if startup_elapsed >= self._startup_grace_seconds:
+                if self._last_receive_time is None:
+                    is_stale = True
+                elif stale_seconds is not None:
+                    is_stale = stale_seconds > self._stale_threshold_seconds
+
         return ZeroMQDebugInfo(
             is_connected=self._running and self.socket is not None,
             endpoint=self.endpoint,
@@ -420,6 +518,10 @@ class ZeroMQConsumer:
             latest_frame=self._latest_frame_metadata,
             uptime_seconds=uptime,
             fps=fps,
+            watchdog_enabled=self._enable_runtime_watchdog,
+            is_stale=is_stale,
+            stale_seconds=stale_seconds,
+            stale_threshold_seconds=self._stale_threshold_seconds,
             is_collection_enabled=self._collection_enabled,
             frame_delay_ms=self._latest_frame_delay_ms,
             parse_time_ms=self._latest_parse_time_ms,

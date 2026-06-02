@@ -17,7 +17,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QGuiApplication, QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -140,6 +140,43 @@ class LogFilterProxyModel(QSortFilterProxyModel):
         return True
 
 
+class _CopyableLogTableView(QTableView):
+    """支持按行复制完整日志内容的表格视图。"""
+
+    _COPY_COLUMN_SEPARATOR = "\t"
+    _COPY_ROW_SEPARATOR = "\n"
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self.copy_selection_to_clipboard()
+            return
+        super().keyPressEvent(event)
+
+    def copy_selection_to_clipboard(self) -> None:
+        selection_model = self.selectionModel()
+        model = self.model()
+        if selection_model is None or model is None:
+            return
+
+        rows = [index.row() for index in selection_model.selectedRows()]
+        if not rows:
+            current_index = self.currentIndex()
+            if not current_index.isValid():
+                return
+            rows = [current_index.row()]
+
+        unique_rows = sorted(set(rows))
+        lines = []
+        for row in unique_rows:
+            values = []
+            for column in range(model.columnCount()):
+                value = model.index(row, column).data(Qt.ItemDataRole.DisplayRole)
+                values.append(str(value or ""))
+            lines.append(self._COPY_COLUMN_SEPARATOR.join(values))
+
+        QGuiApplication.clipboard().setText(self._COPY_ROW_SEPARATOR.join(lines))
+
+
 class _LogFilterBar(QFrame):
     search_changed = Signal(str)
     level_changed = Signal(str)
@@ -182,11 +219,12 @@ class LogPanel(QWidget):
         self.proxy_model = LogFilterProxyModel(self)
         self.proxy_model.setSourceModel(self.model)
 
-        self.table = QTableView()
+        self.table = _CopyableLogTableView()
         self.table.setModel(self.proxy_model)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(False)
         self.table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents

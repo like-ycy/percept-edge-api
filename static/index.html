@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>percept-static 页面入口</title>
+  <link rel="stylesheet" href="assets/vercel-redesign.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html" aria-label="percept-static 页面入口">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <title>percept-static</title>
+              <path d="M4 4h16v16H4z"></path>
+              <path d="M8 8h8v8H8z"></path>
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-title">percept-static</span>
+            <span class="brand-subtitle">统一页面入口</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="页面导航">
+          <a class="active" href="index.html">入口</a>
+          <a href="redesign-upload-reconcile.html" data-protected-link>补偿上传</a>
+          <a href="redesign-collection.html" data-protected-link>数据采集</a>
+          <a href="redesign-monitor.html" data-protected-link>系统监控</a>
+          <a href="redesign-processes.html" data-protected-link>进程监控</a>
+          <a href="redesign-unlock.html" data-protected-link>采集锁</a>
+          <a href="redesign-raw-info.html" data-protected-link>原始数据</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container page">
+      <section class="hero">
+        <div class="hero-stack">
+          <div class="eyebrow">控制台</div>
+          <h1>采集与监控控制台</h1>
+          <p class="lead">集中访问批量补偿上传、数据采集测试、系统监控、进程监控、采集锁解除和原始采集数据查看。</p>
+        </div>
+        <div class="summary-strip">
+          <span class="badge neutral">采集</span>
+          <span class="badge">监控</span>
+          <span class="badge success">补偿</span>
+          <div class="static-auth-status" data-static-auth-status></div>
+        </div>
+      </section>
+
+      <section class="page-card-grid" aria-label="页面列表">
+        <a class="page-card" href="redesign-upload-reconcile.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge">POST /api/upload/reconcile-cloud-notify</span>
+            <span class="page-card-title">批量补偿上传</span>
+            <p>云端通知补偿 · 已上传记录登记修复。包含登录、确认项、补偿结果、运行日志、补偿范围与环境说明。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>补偿</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-collection.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge neutral">WebRTC</span>
+            <span class="page-card-title">数据采集测试</span>
+            <p>实时预览 · WebRTC 多路传输。保留登录环境、任务 ID、状态、开始采集、停止采集和运行日志。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>采集</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-monitor.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge neutral">/api/monitor</span>
+            <span class="page-card-title">系统监控面板</span>
+            <p>CPU 信息、内存信息、磁盘信息、平台信息和机器人状态，沿用原有字段与加载状态。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>系统</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-processes.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge neutral">GET /debug/processes</span>
+            <span class="page-card-title">进程监控面板</span>
+            <p>主进程及递归子进程指标。保留采样时间、读取快照、实时刷新、自动 5s 刷新与完整进程表列。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>进程</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-unlock.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge danger">LOCK</span>
+            <span class="page-card-title">采集锁解除</span>
+            <p>手动解锁采集流水线。保留当前状态字段、操作者、备注、解锁和刷新状态。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>采集锁</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-raw-info.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge neutral">capture metadata</span>
+            <span class="page-card-title">原始采集数据查看</span>
+            <p>按记录 ID 检索 capture 元信息。保留概要、摄像头和 Segment 文件三个结果区域。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>原始数据</span></span>
+        </a>
+      </section>
+    </main>
+  </div>
+  <script src="assets/static-auth.js"></script>
+  <script src="assets/static-index.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.database import CollectionRecord, Task, now_shanghai
 from src.schemas.collection import CollectionRecordStatusEnum
+from src.schemas.status import TaskStatus, UploadStatus
 
 
 class CollectionRecordStore:
@@ -34,10 +35,11 @@ class CollectionRecordStore:
             start_time=start_time,
             output_dir=str(output_dir),
             collection_status=CollectionRecordStatusEnum.COLLECTING.value,
-            upload_status="pending",
+            upload_status=UploadStatus.PENDING.value,
             materialize_progress=0,
             raw_bytes=0,
             raw_frame_count=0,
+            task_progress_counted=False,
         )
         db.add(record)
         await db.commit()
@@ -161,24 +163,34 @@ class CollectionRecordStore:
         await db.delete(record)
         await db.commit()
 
-    async def update_task_progress(self, db: AsyncSession, task_id: int) -> None:
-        """更新任务进度"""
+    async def count_task_progress_once(self, db: AsyncSession, record: CollectionRecord) -> None:
+        """只在未计数时累加一次任务进度。"""
+        if record.task_id is None:
+            return
+        if record.task_progress_counted:
+            logger.info(
+                "任务进度已计数，跳过重复累加: record_id={}, task_id={}", record.id, record.task_id
+            )
+            return
+
+        task_id = record.task_id
         result = await db.execute(select(Task).where(Task.task_id == task_id))
         task = result.scalars().first()
         if not task:
             return
 
         task.progress += 1
+        record.task_progress_counted = True
         logger.info("任务进度更新: task_id={}, progress={}/{}", task_id, task.progress, task.repeat)
 
         if 0 < task.progress < task.repeat:
-            if task.status not in ("stop", "paused"):
-                task.status = "run"
+            if task.status not in (TaskStatus.STOPPED.value, TaskStatus.PAUSED.value):
+                task.status = TaskStatus.RUNNING.value
                 logger.info("任务开始采集: task_id={}", task_id)
             else:
                 logger.info("任务已暂停，保持状态: task_id={}, status={}", task_id, task.status)
         elif task.progress == task.repeat:
-            task.status = "completed"
+            task.status = TaskStatus.COMPLETED.value
             logger.info("任务采集完成: task_id={}", task_id)
 
         await db.commit()

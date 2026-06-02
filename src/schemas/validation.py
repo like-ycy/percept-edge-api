@@ -1,17 +1,12 @@
 # src/schemas/validation.py
 """数据完整性校验相关 Schema"""
 
-from enum import Enum
-
 from pydantic import BaseModel
 
+from src.schemas.status import ValidationStatus
 
-class ValidationStatusEnum(str, Enum):
-    """校验状态"""
 
-    SUCCESS = "success"
-    FAILED = "failed"
-    PARTIAL = "partial"  # 部分通过
+ValidationStatusEnum = ValidationStatus
 
 
 class FileValidationError(BaseModel):

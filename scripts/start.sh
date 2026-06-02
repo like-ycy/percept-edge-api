@@ -125,16 +125,16 @@ main() {
       esac
       mode_args=(--mode "${SELECTED_MODE}")
       ;;
-    robot-cr1)
+    robot-cr1|robot-cr5)
       SELECTED_MODE="${SELECTED_MODE:-bilateral}"
       case "${SELECTED_MODE}" in
         bilateral) ;;
         *)
-          err "不支持的启动模式: ${SELECTED_MODE}，${SELECTED_ROBOT} 没有 VR 采集，仅支持 bilateral"
+          err "不支持的启动模式: ${SELECTED_MODE}，${SELECTED_ROBOT} 仅支持 bilateral"
           exit "${EXIT_PRECONDITION}"
           ;;
       esac
-      mode_args=()
+      mode_args=(--mode "${SELECTED_MODE}")
       ;;
     robot-cr4a|robot-cr4c)
       SELECTED_MODE="${SELECTED_MODE:-bilateral}"

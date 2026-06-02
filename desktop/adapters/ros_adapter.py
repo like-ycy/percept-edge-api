@@ -52,14 +52,55 @@ class RosAdapter(Adapter):
             shell=True,
             shutdown_signal=int(_signal.SIGINT),
             shutdown_grace=cfg.ros_shutdown_grace,
+            force_kill_grace=cfg.force_kill_grace,
             shutdown_sequence=(
                 ShutdownStep(signal=int(_signal.SIGINT), grace=cfg.ros_shutdown_grace),
-                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.process_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.sigterm_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGKILL), grace=cfg.force_kill_grace),
             ),
-            force_kill_grace=cfg.force_kill_grace,
         )
 
     def build_probe(self, ctx: BuildContext) -> Optional[HealthProbe]:
         # ROS 启动无显式就绪端点，由 flow 使用 grace 窗口判断
+        del ctx
+        return None
+
+
+class VrRosAdapter(Adapter):
+    """CR4A/CR4C VR 模式 ROS 进程封装。"""
+
+    def __init__(self, role: Literal["arm", "serial"]) -> None:
+        if role not in {"arm", "serial"}:
+            raise ValueError(f"未知 VR ROS role: {role}")
+        self.role = role
+        self.name = f"vr_ros_{role}"
+        self.log_label = "VR_ROS"
+
+    def build_spec(self, ctx: BuildContext) -> ProcessSpec:
+        cfg = get_config(ctx)
+        if self.role == "arm":
+            cwd = cfg.vr_ros_arm_cwd
+            setup_script = cfg.vr_ros_arm_setup_script
+            command = cfg.vr_ros_arm_cmd
+        else:
+            cwd = cfg.vr_ros_serial_cwd
+            setup_script = cfg.vr_ros_serial_setup_script
+            command = cfg.vr_ros_serial_cmd
+        return ProcessSpec(
+            name=self.name,
+            cmd=f"source '{setup_script}' && exec {command}",
+            cwd=cwd,
+            shell=True,
+            shutdown_signal=int(_signal.SIGINT),
+            shutdown_grace=cfg.ros_shutdown_grace,
+            force_kill_grace=cfg.force_kill_grace,
+            shutdown_sequence=(
+                ShutdownStep(signal=int(_signal.SIGINT), grace=cfg.ros_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.sigterm_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGKILL), grace=cfg.force_kill_grace),
+            ),
+        )
+
+    def build_probe(self, ctx: BuildContext) -> Optional[HealthProbe]:
         del ctx
         return None

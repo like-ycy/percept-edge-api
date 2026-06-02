@@ -1,7 +1,6 @@
-"""状态面板：合并 StatusChip / StageCardWidget / StagePanel / FooterStatusBar。
+"""状态面板：合并 StageCardWidget / StagePanel / FooterStatusBar。
 
 对外暴露：
-    StatusChip   — 状态徽章（用于顶栏共用）
     StagePanel   — 左侧阶段卡片列表
     FooterStatusBar — 底部环境/状态/资源信息条
 """
@@ -9,7 +8,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtWidgets import (
     QFrame,
@@ -22,36 +21,12 @@ from PySide6.QtWidgets import (
 
 from desktop.models.runtime_snapshot import RuntimeSnapshot
 from desktop.models.stage_state import StageState
+from desktop.services.lift_executors import ApiLiftExecutor, ScriptLiftExecutor
+from desktop.services.local_api_client import LocalApiClient
+from desktop.widgets.status_chip import StatusChip
 
-
-class StatusChip(QLabel):
-    _STYLE_MAP = {
-        "idle": ("空闲", "#252626", "#ababab"),
-        "starting": ("启动中", "#004883", "#b5d2ff"),
-        "running": ("运行中", "#005a3c", "#9bffce"),
-        "stopping": ("停止中", "#323c49", "#d9e3f4"),
-        "stopped": ("已停止", "#252626", "#ababab"),
-        "failed": ("错误", "#7f2927", "#ff9993"),
-        "global-starting": ("启动中", "#004883", "#b5d2ff"),
-        "global-running": ("运行中", "#005a3c", "#9bffce"),
-        "global-partial": ("部分运行", "#323c49", "#d9e3f4"),
-        "global-stopping": ("停止中", "#323c49", "#d9e3f4"),
-        "global-stopped": ("已停止", "#252626", "#ababab"),
-        "global-error": ("错误", "#7f2927", "#ff9993"),
-        "global-idle": ("未启动", "#252626", "#ababab"),
-    }
-
-    def __init__(self, key: str = "idle") -> None:
-        super().__init__()
-        self.setObjectName("StatusChip")
-        self.set_status(key)
-
-    def set_status(self, key: str) -> None:
-        text, background, foreground = self._STYLE_MAP.get(key, self._STYLE_MAP["idle"])
-        self.setText(text)
-        self.setStyleSheet(
-            f"QLabel#StatusChip {{ background: {background}; color: {foreground}; }}"
-        )
+if TYPE_CHECKING:
+    from desktop.widgets.lift_control_widget import LiftControlWidget
 
 
 class _StageCardWidget(QFrame):
@@ -105,6 +80,8 @@ class StagePanel(QFrame):
         super().__init__()
         self.setObjectName("StagePanel")
         self._cards: dict[str, _StageCardWidget] = {}
+        self._lift_widget: LiftControlWidget | None = None
+        self._lift_configured = False
 
         title = QLabel("运行阶段")
         title.setStyleSheet("color: #a3c9ff; font-weight: 800; font-size: 14px;")
@@ -148,6 +125,45 @@ class StagePanel(QFrame):
             self._content_layout.insertWidget(self._content_layout.count() - 1, card)
             card.update_stage(stage)
 
+    def set_lift_config(
+        self,
+        enabled: bool,
+        transport: str = "script",
+        api_path: str = "/api/desktop/lift/height",
+        api_url: str = "http://127.0.0.1:8000/",
+        python_bin: str = "",
+        script_path: str = "",
+        min_height: int = 0,
+        max_height: int = 600,
+        step: int = 100,
+    ) -> None:
+        """Configure and optionally show the lift control card."""
+        if not enabled:
+            return
+        if self._lift_configured:
+            return
+        from desktop.widgets.lift_control_widget import LiftControlWidget
+
+        if transport == "http":
+            executor = ApiLiftExecutor(LocalApiClient(api_url), api_path)
+        else:
+            executor = ScriptLiftExecutor(python_bin, script_path)
+
+        self._lift_configured = True
+        self._lift_widget = LiftControlWidget(
+            executor=executor,
+            min_height=min_height,
+            max_height=max_height,
+            step=step,
+        )
+        # Insert at position 0 in _content_layout (before the stretch)
+        self._content_layout.insertWidget(0, self._lift_widget)
+
+    def set_lift_enabled(self, enabled: bool) -> None:
+        """Enable/disable lift control interactions based on runtime state."""
+        if self._lift_widget is not None:
+            self._lift_widget.set_enabled(enabled)
+
 
 class FooterStatusBar(QFrame):
     def __init__(self) -> None:
@@ -155,18 +171,12 @@ class FooterStatusBar(QFrame):
         self.setObjectName("FooterBar")
 
         self.env_label = QLabel("环境: test")
-        self.status_label = QLabel("状态: 未启动")
-        self.health_label = QLabel("健康: <span style='color:#8e8e93;'>●</span>")
         self.metrics_label = QLabel("资源: -")
         self.uptime_label = QLabel("运行时长: 00:00:00")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
         layout.addWidget(self.env_label)
-        layout.addSpacing(12)
-        layout.addWidget(self.status_label)
-        layout.addSpacing(12)
-        layout.addWidget(self.health_label)
         layout.addSpacing(12)
         layout.addWidget(self.metrics_label)
         layout.addStretch(1)
@@ -175,14 +185,10 @@ class FooterStatusBar(QFrame):
     def update_runtime(
         self,
         environment: str,
-        status: str,
         started_at: Optional[datetime],
-        health_text: str = "unknown / unknown",
         metrics_text: str = "-",
     ) -> None:
         self.env_label.setText(f"环境: {environment}")
-        self.status_label.setText(f"状态: {status}")
-        self.health_label.setText(f"健康: {health_text}")
         self.metrics_label.setText(f"资源: {metrics_text}")
         if started_at is None:
             self.uptime_label.setText("运行时长: 00:00:00")

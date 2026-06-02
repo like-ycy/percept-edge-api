@@ -11,6 +11,7 @@ import os
 import sys
 
 from desktop.app import run
+from desktop.profiles import load_profile
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -38,6 +39,13 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     env = args.env or os.getenv("PERCEPT_ENV") or os.getenv("APP_ENV") or "test"
     mode = args.mode or os.getenv("PERCEPT_LAUNCH_MODE")
+    if mode is not None:
+        profile = load_profile(args.robot)
+        if mode not in profile.launch_modes:
+            raise SystemExit(
+                f"不支持的启动模式: {mode}，{profile.robot_name} 仅支持 "
+                f"{', '.join(profile.launch_modes)}"
+            )
     return run(profile_name=args.robot, environment=env, launch_mode=mode)
 
 

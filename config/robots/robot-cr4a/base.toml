@@ -28,15 +28,14 @@ status_poll_interval = 0.2
 runtime_health_interval = 300.0
 ros_startup_grace = 3.0
 roscore_startup_grace = 2.0
-process_shutdown_grace = 5.0
-ros_shutdown_grace = 10.0
-force_kill_grace = 2.0
 ready_timeout = 30.0
 monitor_timeout = 0.5
 probe_interval = 1.0
 
 [desktop.lift]
 enabled = true
+transport = "script"
+api_path = "/api/desktop/lift/height"
 python_bin = "/usr/local/bin/python3.10"
 script_path = "/home/cr4a/workspaces/percept-edge/lift.py"
 min_height = 0

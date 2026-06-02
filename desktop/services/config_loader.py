@@ -10,7 +10,7 @@ import logging
 import os
 import shlex
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +18,16 @@ if TYPE_CHECKING:
     from src.config import DesktopRuntimeSettings, Settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RuntimeRosCommand:
+    name: str
+    log_label: str
+    cwd: str
+    setup_script: str
+    cmd: str
+    path_prefix: str = ""
 
 
 def _env_or_default(name: str, default: str) -> str:
@@ -45,7 +55,12 @@ def _read_bool_env(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw in {None, ""}:
         return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+    normalized = str(raw).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"环境变量 {name} 必须是布尔值，当前为: {raw}")
 
 
 def _load_app_settings(environment: str, repo_root: Path, robot_name: str) -> "Settings":
@@ -75,32 +90,22 @@ def _replace_leading_uv_command(command: str, uv_bin: str) -> str:
     return shlex.join(tokens)
 
 
-def _resolve_rep_endpoint(environment: str, repo_root: Path, robot_name: str) -> str:
-    from_env = os.getenv("ROBOT_OS_REP_ENDPOINT")
+def _resolve_command_endpoint(environment: str, repo_root: Path, robot_name: str) -> str:
+    from_env = os.getenv("ROBOT_OS_COMMAND_ENDPOINT")
     if from_env:
         return from_env
 
     try:
-        return _load_app_settings(environment, repo_root, robot_name).zeromq.rep_endpoint
+        return _load_app_settings(environment, repo_root, robot_name).zeromq.command_endpoint
     except Exception:
-        fallback = "ipc:///tmp/robotos_monitor"
+        fallback = "ipc:///tmp/robotos_command"
         logger.warning(
-            "无法从配置加载 rep_endpoint (env=%s)，回退到默认值: %s",
+            "无法从配置加载 command_endpoint (env=%s)，回退到默认值: %s",
             environment,
             fallback,
             exc_info=True,
         )
         return fallback
-
-
-@dataclass(frozen=True)
-class LiftControlConfig:
-    enabled: bool
-    python_bin: str
-    script_path: str
-    min_height: int
-    max_height: int
-    step: int
 
 
 @dataclass
@@ -113,6 +118,7 @@ class RuntimeConfig:
     roscore_cmd: str
     ros_slave_cmd: str
     ros_master_cmd: str
+    ros_commands: tuple[RuntimeRosCommand, ...]
     robot_os_cwd: str
     robot_os_cmd: str
     api_cwd: str
@@ -125,31 +131,32 @@ class RuntimeConfig:
     roscore_startup_grace: float
     process_shutdown_grace: float
     ros_shutdown_grace: float
+    sigterm_shutdown_grace: float
+    api_shutdown_grace: float
     force_kill_grace: float
     ready_timeout: float
     monitor_timeout: float
     probe_interval: float
-    rep_endpoint: str
+    command_endpoint: str
     server_port: int
-    launch_mode: str
     vr_ros_enabled: bool = False
     vr_ros_prepare_countdown_seconds: int = 30
     vr_ros_arm_cwd: str = ""
     vr_ros_arm_setup_script: str = ""
-    vr_ros_arm_cmd: str = "roslaunch arx_x5_controller open_vr_double_arm.launch"
+    vr_ros_arm_cmd: str = ""
     vr_ros_serial_cwd: str = ""
     vr_ros_serial_setup_script: str = ""
-    vr_ros_serial_cmd: str = "rosrun serial_port serial_port"
-    lift: LiftControlConfig = field(
-        default_factory=lambda: LiftControlConfig(
-            enabled=False,
-            python_bin="/usr/local/bin/python3.10",
-            script_path="",
-            min_height=0,
-            max_height=600,
-            step=100,
-        )
-    )
+    vr_ros_serial_cmd: str = ""
+    # Lift control
+    lift_enabled: bool = False
+    lift_transport: str = "script"
+    lift_api_path: str = "/api/desktop/lift/height"
+    lift_python_bin: str = ""
+    lift_script_path: str = ""
+    lift_min_height: int = 0
+    lift_max_height: int = 600
+    lift_step: int = 100
+    launch_mode: str = "bilateral"
 
     @classmethod
     def load(
@@ -164,7 +171,6 @@ class RuntimeConfig:
         )
         app_settings = _load_app_settings(environment, repo_root, effective_robot_name)
         runtime = app_settings.desktop.runtime
-        lift = app_settings.desktop.lift
         if os.getenv("PERCEPT_DESKTOP_LEGACY_RUNTIME_FALLBACK") == "1":
             logger.warning(
                 "PERCEPT_DESKTOP_LEGACY_RUNTIME_FALLBACK=1，使用 legacy desktop runtime 默认值 "
@@ -173,13 +179,33 @@ class RuntimeConfig:
                 effective_robot_name,
             )
             runtime = _load_legacy_runtime_settings()
-        rep_endpoint = os.getenv("ROBOT_OS_REP_ENDPOINT") or app_settings.zeromq.rep_endpoint
+        command_endpoint = _resolve_command_endpoint(environment, repo_root, effective_robot_name)
         server_port = _read_int_env("SERVER__PORT", app_settings.server.port)
 
         uv_bin = _env_or_default("UV_BIN", runtime.uv_bin)
         api_cmd_default = runtime.api_cmd
         if os.getenv("UV_BIN") and "uv" in api_cmd_default:
             api_cmd_default = _replace_leading_uv_command(api_cmd_default, uv_bin)
+
+        # Lift control configuration
+        lift_section = getattr(app_settings.desktop, "lift", None)
+        lift_enabled = False
+        lift_transport = "script"
+        lift_api_path = "/api/desktop/lift/height"
+        lift_python_bin = ""
+        lift_script_path = ""
+        lift_min_height = 0
+        lift_max_height = 600
+        lift_step = 100
+        if lift_section is not None:
+            lift_enabled = bool(getattr(lift_section, "enabled", False))
+            lift_transport = str(getattr(lift_section, "transport", "script"))
+            lift_api_path = str(getattr(lift_section, "api_path", "/api/desktop/lift/height"))
+            lift_python_bin = str(getattr(lift_section, "python_bin", ""))
+            lift_script_path = str(getattr(lift_section, "script_path", ""))
+            lift_min_height = int(getattr(lift_section, "min_height", 0))
+            lift_max_height = int(getattr(lift_section, "max_height", 600))
+            lift_step = int(getattr(lift_section, "step", 100))
 
         return cls(
             repo_root=repo_root,
@@ -190,6 +216,17 @@ class RuntimeConfig:
             roscore_cmd=_env_or_default("ROSCORE_CMD", runtime.roscore_cmd),
             ros_slave_cmd=_env_or_default("ROS_SLAVE_CMD", runtime.ros_slave_cmd),
             ros_master_cmd=_env_or_default("ROS_MASTER_CMD", runtime.ros_master_cmd),
+            ros_commands=tuple(
+                RuntimeRosCommand(
+                    name=command.name,
+                    log_label=command.log_label,
+                    cwd=command.cwd,
+                    setup_script=command.setup_script,
+                    cmd=command.cmd,
+                    path_prefix=command.path_prefix,
+                )
+                for command in runtime.ros_commands
+            ),
             robot_os_cwd=_env_or_default("ROBOT_OS_CWD", runtime.robot_os_cwd),
             robot_os_cmd=_env_or_default("ROBOT_OS_CMD", runtime.robot_os_cmd),
             api_cwd=_env_or_default("API_CWD", runtime.api_cwd or str(repo_root)),
@@ -210,13 +247,16 @@ class RuntimeConfig:
                 "PROCESS_SHUTDOWN_GRACE", runtime.process_shutdown_grace
             ),
             ros_shutdown_grace=_read_float_env("ROS_SHUTDOWN_GRACE", runtime.ros_shutdown_grace),
+            sigterm_shutdown_grace=_read_float_env(
+                "SIGTERM_SHUTDOWN_GRACE", runtime.sigterm_shutdown_grace
+            ),
+            api_shutdown_grace=_read_float_env("API_SHUTDOWN_GRACE", runtime.api_shutdown_grace),
             force_kill_grace=_read_float_env("FORCE_KILL_GRACE", runtime.force_kill_grace),
             ready_timeout=_read_float_env("ROBOT_OS_READY_TIMEOUT", runtime.ready_timeout),
             monitor_timeout=_read_float_env("ROBOT_OS_MONITOR_TIMEOUT", runtime.monitor_timeout),
             probe_interval=_read_float_env("ROBOT_OS_PROBE_INTERVAL", runtime.probe_interval),
-            rep_endpoint=rep_endpoint,
+            command_endpoint=command_endpoint,
             server_port=server_port,
-            launch_mode=os.getenv("PERCEPT_LAUNCH_MODE", "bilateral"),
             vr_ros_enabled=_read_bool_env("VR_ROS_ENABLED", runtime.vr_ros_enabled),
             vr_ros_prepare_countdown_seconds=_read_int_env(
                 "VR_ROS_PREPARE_COUNTDOWN_SECONDS",
@@ -228,20 +268,27 @@ class RuntimeConfig:
                 runtime.vr_ros_arm_setup_script,
             ),
             vr_ros_arm_cmd=_env_or_default("VR_ROS_ARM_CMD", runtime.vr_ros_arm_cmd),
-            vr_ros_serial_cwd=_env_or_default("VR_ROS_SERIAL_CWD", runtime.vr_ros_serial_cwd),
+            vr_ros_serial_cwd=_env_or_default(
+                "VR_ROS_SERIAL_CWD",
+                runtime.vr_ros_serial_cwd,
+            ),
             vr_ros_serial_setup_script=_env_or_default(
                 "VR_ROS_SERIAL_SETUP_SCRIPT",
                 runtime.vr_ros_serial_setup_script,
             ),
-            vr_ros_serial_cmd=_env_or_default("VR_ROS_SERIAL_CMD", runtime.vr_ros_serial_cmd),
-            lift=LiftControlConfig(
-                enabled=lift.enabled,
-                python_bin=lift.python_bin,
-                script_path=lift.script_path,
-                min_height=lift.min_height,
-                max_height=lift.max_height,
-                step=lift.step,
+            vr_ros_serial_cmd=_env_or_default(
+                "VR_ROS_SERIAL_CMD",
+                runtime.vr_ros_serial_cmd,
             ),
+            launch_mode=os.getenv("PERCEPT_LAUNCH_MODE", "bilateral"),
+            lift_enabled=lift_enabled,
+            lift_transport=lift_transport,
+            lift_api_path=lift_api_path,
+            lift_python_bin=lift_python_bin,
+            lift_script_path=lift_script_path,
+            lift_min_height=lift_min_height,
+            lift_max_height=lift_max_height,
+            lift_step=lift_step,
         )
 
     @property

@@ -11,28 +11,23 @@
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
-import time
-from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
-from urllib.request import urlopen
+from typing import Any, Callable, Optional, Sequence
 
-import psutil
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from desktop.adapters.base import Adapter, BuildContext, ProcessSpec
-from desktop.flows.base import FlowEvent, StageStatus, Step
+from desktop.adapters.base import Adapter, BuildContext
+from desktop.flows.base import FlowEvent, StageStatus, Step, StepKind
 from desktop.flows.sequential import SequentialFlowRunner
 from desktop.models.log_entry import LogEntry
 from desktop.models.runtime_state import RuntimeState
 from desktop.models.stage_state import StageState
 from desktop.profiles.base import RobotProfile
-from desktop.services.config_loader import LiftControlConfig, RuntimeConfig
+from desktop.services.config_loader import RuntimeConfig
 from desktop.services.health_checker import HealthChecker, RuntimeHealthCollector
 from desktop.services.process_manager import ProcessManager
 from desktop.services.runtime_state import RuntimeStateMachine, RuntimeStateStore
@@ -42,17 +37,7 @@ class RuntimeFacade(QObject):
     log_emitted = Signal(object)  # LogEntry
     snapshot_changed = Signal(object)  # RuntimeSnapshot
 
-    _QUIET_PROCESS_NAMES = frozenset(
-        {
-            "ros_slave",
-            "ros_master",
-            "ros_master1",
-            "ros_pos_follow1",
-            "ros_master2",
-            "ros_pos_follow2",
-        }
-    )
-    _UPLOAD_STOP_MAX_WAIT_SECONDS = 300.0
+    _QUIET_PROCESS_NAMES = frozenset({"ros_slave", "ros_master"})
 
     def __init__(
         self,
@@ -99,13 +84,13 @@ class RuntimeFacade(QObject):
         self._close_pending = False
         self._restart_pending = False
         self._finalized = True  # 初始未启动视为已收敛
-        self._upload_stop_wait_started_at: float | None = None
-        self._vr_ready_confirmation_handler: Callable[[int], bool] | None = None
+        self._vr_ready_confirmation_handler: Optional[Callable[[int], bool]] = None
 
         self._pm.line.connect(self._on_process_line)
         self._pm.started.connect(self._on_process_started)
         self._pm.finished.connect(self._on_process_finished)
         self._pm.error.connect(self._on_process_error)
+        self._pm.serial_stop_finished.connect(self._finalize_stop)
 
     # ---- 对外属性 ----
 
@@ -122,20 +107,20 @@ class RuntimeFacade(QObject):
         return self._launch_modes
 
     @property
-    def robot_name(self) -> str:
-        return self._profile.robot_name
-
-    @property
-    def lift_config(self) -> LiftControlConfig:
-        return self._config.lift
-
-    @property
-    def vr_ready_countdown_seconds(self) -> int:
-        return self._config.vr_ros_prepare_countdown_seconds
-
-    @property
     def requires_ros_for_non_vr(self) -> bool:
         return self._profile.ros_required
+
+    @property
+    def robot_name(self) -> str:
+        return self._config.robot_name
+
+    @property
+    def api_url(self) -> str:
+        return self._config.api_url
+
+    @property
+    def uses_managed_vr_ros(self) -> bool:
+        return self._uses_managed_vr_ros()
 
     @property
     def started_at(self) -> Optional[datetime]:
@@ -145,18 +130,25 @@ class RuntimeFacade(QObject):
     def display_title(self) -> str:
         return f"Percept Edge Runtime Console - {self._profile.display_name}"
 
+    @property
+    def lift_config(self) -> dict[str, Any]:
+        """Return lift control configuration for the current robot."""
+        return {
+            "enabled": self._config.lift_enabled,
+            "transport": self._config.lift_transport,
+            "api_path": self._config.lift_api_path,
+            "python_bin": self._config.lift_python_bin,
+            "script_path": self._config.lift_script_path,
+            "min_height": self._config.lift_min_height,
+            "max_height": self._config.lift_max_height,
+            "step": self._config.lift_step,
+        }
+
     def is_running(self) -> bool:
         return self._pm.any_alive()
 
     def is_busy(self) -> bool:
         return self.is_running() or (self._runner is not None and not self._runner.is_stopped())
-
-    @property
-    def uses_managed_vr_ros(self) -> bool:
-        return self._requires_vr_ros()
-
-    def set_vr_ready_confirmation_handler(self, handler: Callable[[int], bool]) -> None:
-        self._vr_ready_confirmation_handler = handler
 
     # ---- 控制 ----
 
@@ -207,7 +199,7 @@ class RuntimeFacade(QObject):
             uv_bin=self._config.uv_bin,
             extra={
                 "config": self._config,
-                "vr_ready_confirmation": self._confirm_vr_ready,
+                "gate_handlers": {"vr_ready_confirmation": self._confirm_vr_ready},
             },
         )
         self._runner = SequentialFlowRunner(
@@ -224,49 +216,6 @@ class RuntimeFacade(QObject):
     def stop_runtime(self, emergency: bool = False) -> None:
         if not self.is_busy():
             return
-
-        if not emergency:
-            self._upload_stop_wait_started_at = time.monotonic()
-            QTimer.singleShot(0, self._check_uploads_then_stop)
-            return
-
-        self._do_stop_runtime(emergency=True)
-
-    def _check_uploads_then_stop(self) -> None:
-        api_url = f"http://127.0.0.1:{self._config.server_port}/api/upload/active"
-        try:
-            with urlopen(api_url, timeout=1.0) as resp:
-                data = json.loads(resp.read())
-                if data.get("code") == 200:
-                    records = data.get("data", {}).get("records", [])
-                    if records:
-                        elapsed = time.monotonic() - (
-                            self._upload_stop_wait_started_at or time.monotonic()
-                        )
-                        if elapsed >= self._UPLOAD_STOP_MAX_WAIT_SECONDS:
-                            self._emit_log(
-                                "RUNTIME",
-                                "WARN",
-                                "等待上传超过 300 秒，继续停止运行时",
-                            )
-                            self._do_stop_runtime(emergency=False)
-                            return
-
-                        count = len(records)
-                        self._emit_log(
-                            "RUNTIME",
-                            "WARN",
-                            f"检测到 {count} 个上传任务正在运行，等待完成后停止",
-                        )
-                        QTimer.singleShot(5000, self._check_uploads_then_stop)
-                        return
-        except Exception:
-            pass
-
-        self._do_stop_runtime(emergency=False)
-
-    def _do_stop_runtime(self, emergency: bool = False) -> None:
-        self._upload_stop_wait_started_at = None
         self._health_timer.stop()
         self._state_machine.transition(
             RuntimeState.STOPPING,
@@ -276,13 +225,11 @@ class RuntimeFacade(QObject):
         self._state_machine.mark_all_active_stopping()
         self._emit_log("RUNTIME", "WARN" if emergency else "INFO", "收到停止请求")
         if self._runner is not None:
-            self._runner.stop()
+            self._runner.stop(stop_processes=False)
         if emergency:
             self._pm.stop_all(emergency=True)
-        self._stop_nginx_service()
-        grace = int(self._shutdown_sequence_grace() * 1000)
-        QTimer.singleShot(grace, self._force_kill_remaining)
-        QTimer.singleShot(grace + 300, self._finalize_stop)
+        else:
+            self._pm.stop_all(order=self._shutdown_order())
         self._emit_snapshot()
 
     def restart_runtime(self) -> None:
@@ -299,14 +246,15 @@ class RuntimeFacade(QObject):
         self._state_machine.reset(self._environment)
         self._emit_snapshot()
 
+    def set_vr_ready_confirmation_handler(self, handler: Callable[[int], bool]) -> None:
+        self._vr_ready_confirmation_handler = handler
+
     def cleanup_for_exit(self) -> None:
         """Qt 退出或未捕获异常时的同步兜底清理。"""
         self._health_timer.stop()
         if self._runner is not None and not self._runner.is_stopped():
-            self._runner.stop()
-        self._pm.cleanup_for_exit(
-            timeout=max(self._config.process_shutdown_grace, self._config.ros_shutdown_grace)
-        )
+            self._runner.stop(stop_processes=False)
+        self._pm.cleanup_for_exit()
 
     # ---- FlowEvent 桥接 ----
 
@@ -343,11 +291,8 @@ class RuntimeFacade(QObject):
         self._emit_snapshot()
 
     def _schedule_finalize_after_fail(self) -> None:
-        """Flow 内部 _fail 只把进程停了，facade 需要自己收敛：停健康轮询 + 兜底强杀 + 触发 finalize。"""
+        """Flow 内部 _fail 会触发进程停止，facade 只需停健康轮询并等待串行停止完成。"""
         self._health_timer.stop()
-        grace = int(self._shutdown_sequence_grace() * 1000)
-        QTimer.singleShot(grace, self._force_kill_remaining)
-        QTimer.singleShot(grace + 300, self._finalize_stop)
 
     def _maybe_waiting_state(self, stage: str, event: FlowEvent) -> None:
         """若当前 Step 在 extra 中声明了 waiting_state，进入对应全局状态。"""
@@ -411,31 +356,6 @@ class RuntimeFacade(QObject):
 
     _STOP_OR_ERROR = frozenset({RuntimeState.STOPPING, RuntimeState.ERROR})
 
-    def _force_kill_remaining(self) -> None:
-        if self._state_machine.runtime_state not in self._STOP_OR_ERROR:
-            return
-        self._pm.force_kill_all()
-
-    def _shutdown_sequence_grace(self) -> float:
-        """等待最长优雅停止序列完成，再进入统一强杀兜底。"""
-        ros_sequence_grace = self._config.ros_shutdown_grace + self._config.process_shutdown_grace
-        managed_sequence_grace = self._config.process_shutdown_grace * 2
-        return max(ros_sequence_grace, managed_sequence_grace) + self._config.force_kill_grace
-
-    def _stop_nginx_service(self) -> None:
-        spec = ProcessSpec(
-            name="stop_nginx",
-            cmd="sudo -n systemctl stop nginx",
-            cwd=str(self._repo_root),
-            shell=True,
-            shutdown_grace=1.0,
-            force_kill_grace=1.0,
-        )
-        try:
-            self._pm.spawn(spec, env_extra=self._env_for_processes())
-        except Exception as exc:
-            self._emit_log("PERCEPT", "WARN", f"nginx 停止命令启动失败: {exc}")
-
     def _finalize_stop(self) -> None:
         if self._pm.any_alive():
             QTimer.singleShot(500, self._finalize_stop)
@@ -476,9 +396,18 @@ class RuntimeFacade(QObject):
         if runner is None:
             return
         if not runner.is_stopped():
-            runner.stop()
+            runner.stop(stop_processes=False)
         runner.deleteLater()
         self._runner = None
+
+    def _shutdown_order(self) -> tuple[str, ...]:
+        names: list[str] = []
+        for step in self._steps:
+            if step.kind not in {StepKind.SPAWN, StepKind.RUN_ONCE}:
+                continue
+            if step.adapter and step.adapter not in names:
+                names.append(step.adapter)
+        return tuple(reversed(names))
 
     # ---- 健康采集 ----
 
@@ -515,27 +444,9 @@ class RuntimeFacade(QObject):
                     ),
                 ]
             )
-            checks.extend(_profile_required_path_checks(self._profile))
-            stale_ros = _find_stale_ros_processes()
-            if stale_ros:
-                detail = "; ".join(stale_ros[:5])
-                if len(stale_ros) > 5:
-                    detail = f"{detail}; ..."
-                checks.append(
-                    (
-                        False,
-                        "检测到未由当前桌面端托管的 ROS 残留进程，已拒绝启动以保护机械臂安全: "
-                        f"{detail}",
-                    )
-                )
-        if self._requires_vr_ros():
+        if self._uses_managed_vr_ros():
             checks.extend(
                 [
-                    (Path(cfg.ros_env_cwd).is_dir(), f"ROS_ENV_CWD 不存在: {cfg.ros_env_cwd}"),
-                    (
-                        Path(cfg.ros_setup_script).is_file(),
-                        f"ROS setup 脚本不存在: {cfg.ros_setup_script}",
-                    ),
                     (
                         Path(cfg.vr_ros_arm_cwd).is_dir(),
                         f"VR_ROS_ARM_CWD 不存在: {cfg.vr_ros_arm_cwd}",
@@ -556,18 +467,6 @@ class RuntimeFacade(QObject):
                     (bool(cfg.vr_ros_serial_cmd), "VR_ROS_SERIAL_CMD 不能为空"),
                 ]
             )
-            stale_ros = _find_stale_ros_processes()
-            if stale_ros:
-                detail = "; ".join(stale_ros[:5])
-                if len(stale_ros) > 5:
-                    detail = f"{detail}; ..."
-                checks.append(
-                    (
-                        False,
-                        "检测到未由当前桌面端托管的 ROS 残留进程，已拒绝启动以保护机械臂安全: "
-                        f"{detail}",
-                    )
-                )
         checks.extend(
             [
                 (Path(cfg.api_cwd).is_dir(), f"API_CWD 不存在: {cfg.api_cwd}"),
@@ -627,24 +526,28 @@ class RuntimeFacade(QObject):
     def _requires_ros(self) -> bool:
         return self._profile.ros_required and self._launch_mode != "vr"
 
-    def _requires_vr_ros(self) -> bool:
+    def _uses_managed_vr_ros(self) -> bool:
         return (
             self._launch_mode == "vr"
             and self._config.vr_ros_enabled
             and _profile_supports_vr_ros(self._profile)
         )
 
-    def _confirm_vr_ready(self, _ctx: object) -> bool:
-        countdown = self._config.vr_ros_prepare_countdown_seconds
-        self._emit_log("VR_ROS", "WARN", f"等待用户确认 VR 准备完成，倒计时={countdown}s")
+    def _confirm_vr_ready(self, _ctx: BuildContext) -> bool:
+        countdown_seconds = max(0, int(self._config.vr_ros_prepare_countdown_seconds))
+        self._emit_log(
+            "RUNTIME",
+            "INFO",
+            f"VR ROS 已启动，等待用户完成 VR 准备确认，倒计时 {countdown_seconds} 秒",
+        )
         if self._vr_ready_confirmation_handler is None:
-            self._emit_log("VR_ROS", "ERROR", "未注册 VR 准备确认弹窗处理器")
+            self._emit_log("RUNTIME", "ERROR", "VR 准备确认弹窗未注册，无法继续启动")
             return False
-        return self._vr_ready_confirmation_handler(countdown)
+        return bool(self._vr_ready_confirmation_handler(countdown_seconds))
 
     def _emit_log(self, source: str, level: str, message: str) -> None:
         entry = LogEntry(
-            timestamp=datetime.now().strftime("%H:%M:%S"),
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             source=source,
             level=level,
             message=message,
@@ -692,77 +595,6 @@ def _build_initial_stages(steps: tuple[Step, ...]) -> list[StageState]:
     return stages
 
 
-def _profile_required_path_checks(profile: RobotProfile) -> list[tuple[bool, str]]:
-    """从 profile.extra['required_paths'] 读取额外文件/目录前置校验。"""
-    raw_items = profile.extra.get("required_paths", ())
-    checks: list[tuple[bool, str]] = []
-    if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes)):
-        return checks
-
-    for raw_item in raw_items:
-        if not isinstance(raw_item, Sequence) or isinstance(raw_item, (str, bytes)):
-            continue
-        if len(raw_item) != 3:
-            continue
-        kind, path_value, message = raw_item
-        if (
-            not isinstance(kind, str)
-            or not isinstance(path_value, str)
-            or not isinstance(message, str)
-        ):
-            continue
-        path = Path(path_value)
-        if kind == "dir":
-            checks.append((path.is_dir(), message))
-        elif kind == "file":
-            checks.append((path.is_file(), message))
-    return checks
-
-
-def _profile_supports_vr_ros(profile: RobotProfile) -> bool:
-    adapter_names = {adapter.name for adapter in profile.adapters}
-    return {"vr_ros_arm", "vr_ros_serial"}.issubset(adapter_names)
-
-
-def _find_stale_ros_processes() -> list[str]:
-    """启动 CR 主动臂链路前拦截疑似残留 ROS 进程，避免新旧控制节点并存。"""
-    current_pid = os.getpid()
-    stale: list[str] = []
-    for proc in psutil.process_iter(attrs=["pid", "cmdline", "name"]):
-        try:
-            pid = int(proc.info.get("pid") or 0)
-            if pid <= 0 or pid == current_pid:
-                continue
-            raw_cmdline = proc.info.get("cmdline")
-            if isinstance(raw_cmdline, list):
-                cmdline = " ".join(str(part) for part in raw_cmdline)
-            else:
-                cmdline = ""
-            raw_name = proc.info.get("name")
-            name = str(raw_name or "")
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, ValueError):
-            continue
-
-        marker = f"{name} {cmdline}"
-        if _is_ros_stale_process(marker):
-            stale.append(f"PID={pid} {cmdline or name}".strip())
-    return stale
-
-
-def _is_ros_stale_process(marker: str) -> bool:
-    return any(
-        pattern in marker
-        for pattern in (
-            "roscore",
-            "roslaunch arm_control L5.launch",
-            "roslaunch arx_x5_controller open_remote_slave.launch",
-            "roslaunch arx_x5_controller open_remote_master.launch",
-            "roslaunch arx_x5_controller open_vr_double_arm.launch",
-            "rosrun serial_port serial_port",
-        )
-    )
-
-
 def _normalize_launch_mode(raw: str | None, supported: Sequence[str]) -> str:
     if not supported:
         return "bilateral"
@@ -782,3 +614,11 @@ _WAITING_STATE_MESSAGES: dict[RuntimeState, str] = {
     RuntimeState.WAITING_ROBOT_READY: "等待 Robot OS 就绪",
     RuntimeState.WAITING_API_READY: "等待 API startup gate",
 }
+
+
+def _profile_supports_vr_ros(profile: RobotProfile) -> bool:
+    adapter_names = {adapter.name for adapter in profile.adapters}
+    return profile.robot_name in {"robot-cr4a", "robot-cr4c"} and {
+        "vr_ros_arm",
+        "vr_ros_serial",
+    }.issubset(adapter_names)

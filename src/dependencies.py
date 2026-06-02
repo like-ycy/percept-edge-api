@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import Settings
 from src.core.app_context import AppRuntimeState, AppServices, get_app_context
+from src.core.exceptions import BusinessError, ExternalServiceError
 from src.core.task_manager import BackgroundTaskManager
 from src.core.sync_throttle import SyncThrottle
 from src.repositories.task_repo import TaskRepository
@@ -17,6 +18,7 @@ from src.services.collection_service import CollectionService
 from src.services.storage_service import DatabaseStorageService
 from src.services.task_service import TaskService
 from src.services.monitor_service import MonitorService
+from src.services.robot_command_service import RobotCommandService
 from src.services.upload_service import UploadService
 from src.services.task_sync_service import TaskSyncService
 
@@ -185,3 +187,29 @@ def get_monitor_service(request: Request) -> MonitorService:
 def get_process_monitor(request: Request):
     """获取进程监控服务（可能为 None）"""
     return get_app_services(request).process_monitor
+
+
+def get_robot_command_service(request: Request) -> RobotCommandService:
+    """获取 RobotOS 命令执行服务"""
+    service = get_app_services(request).robot_command_service
+    if service is None:
+        raise ExternalServiceError("RobotOS Command", "service not initialized")
+    return service
+
+
+def validate_electromagnet_capability(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """校验当前机器人是否支持电磁铁控制。"""
+    if settings.robot_control.electromagnet.enabled:
+        return
+    raise BusinessError("当前机器人不支持电磁铁控制，仅 robot-cr5 支持")
+
+
+def validate_desktop_lift_capability(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """校验当前机器人是否支持本地 API 升降控制。"""
+    if settings.desktop.lift.enabled and settings.desktop.lift.transport == "http":
+        return
+    raise BusinessError("当前机器人不支持本地 API 升降控制，仅 robot-cr5 支持")

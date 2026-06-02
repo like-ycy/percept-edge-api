@@ -1,6 +1,7 @@
-"""W1 机型 profile：占位实现，仅启动 robot_os 与 api。
+"""W1 机型 profile：仅托管 robot_os 与 api。
 
-W1 实际外设依赖确认后再补充 adapter（CAN / 视觉等）与 flow。
+W1 不由 desktop 启动 ROS 节点，但 robot_os.pyz 仍依赖 ROS Python 消息包，
+因此启动 Robot OS 前需要 source ROS setup，让 diagnostic_msgs 等包可见。
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ def _profile() -> RobotProfile:
         robot_name="robot-w1",
         display_name="W1",
         adapters=(
-            RobotOsAdapter(source_ros=False),
+            RobotOsAdapter(source_ros=True),
             ApiAdapter(),
         ),
         flow_factory=build_w1_flow,

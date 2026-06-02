@@ -47,7 +47,7 @@ class FFmpegRecorder:
         "right_wheel_current_a",
     )
     _OBSERVATION_ARM_FIELDS: ClassVar[dict[str, set[str]]] = {
-        "slave_arm1": {"joint_pos", "eef", "gripper"},
+        "slave_arm1": {"joint_pos", "eef", "gripper", "translation"},
         "slave_arm2": {"joint_pos", "eef", "gripper"},
         "master_arm1": {"joint_pos", "eef", "gripper"},
         "master_arm2": {"joint_pos", "eef", "gripper"},
@@ -110,6 +110,10 @@ class FFmpegRecorder:
         self._start_time: datetime | None = None
         self._filename_prefix: str | None = None
         self._writer_frame_counts: dict[str, int] = {}
+        self._skipped_frame_count = 0
+        self._skipped_missing_camera_counts: dict[str, int] = {}
+        self._skipped_extra_camera_counts: dict[str, int] = {}
+        self._skipped_no_rgb_count = 0
 
         # 帧完整性检查：记录首帧的摄像头列表
         self._expected_cameras: set[str] | None = None
@@ -129,6 +133,10 @@ class FFmpegRecorder:
         self._step_count = 0
         self._expected_cameras = None  # 重置，等待首帧确定
         self._writer_frame_counts = {}
+        self._skipped_frame_count = 0
+        self._skipped_missing_camera_counts = {}
+        self._skipped_extra_camera_counts = {}
+        self._skipped_no_rgb_count = 0
 
         # 确保输出目录存在
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -183,6 +191,7 @@ class FFmpegRecorder:
             # 帧不完整，跳过（保持所有输出一致性）
             missing = self._expected_cameras - current_cameras
             extra = current_cameras - self._expected_cameras
+            self._record_skipped_frame(missing=missing, extra=extra)
             logger.warning(
                 "帧数据不完整，跳过: timestamp={}, 缺少={}, 多余={}",
                 frame.timestamp,
@@ -202,6 +211,7 @@ class FFmpegRecorder:
             logger.warning(
                 "video_only 模式收到无 RGB 数据的帧，跳过: timestamp={}", frame.timestamp
             )
+            self._record_skipped_no_rgb_frame()
             return False
 
         for camera in frame.cameras:
@@ -282,11 +292,22 @@ class FFmpegRecorder:
             self._episode_file = None
 
         logger.info(
-            "录制器停止完成: output_dir={}, steps={}, duration_ms={:.1f}",
+            "录制器停止完成: output_dir={}, steps={}, skipped_frames={}, duration_ms={:.1f}",
             self._output_dir,
             self._step_count,
+            self._skipped_frame_count,
             (perf_counter() - stop_started_at) * 1000,
         )
+        if self._skipped_frame_count > 0:
+            logger.warning(
+                "录制器跳帧汇总: output_dir={}, skipped_frames={}, missing_camera_counts={}, "
+                "extra_camera_counts={}, no_rgb_frames={}",
+                self._output_dir,
+                self._skipped_frame_count,
+                self._skipped_missing_camera_counts,
+                self._skipped_extra_camera_counts,
+                self._skipped_no_rgb_count,
+            )
 
     def cleanup_on_error(self) -> None:
         """异常发生时清理资源
@@ -343,15 +364,34 @@ class FFmpegRecorder:
 
     def _persist_writer_frame_counts(self) -> None:
         """将每路视频帧数快照持久化到输出目录"""
-        if not self._writer_frame_counts:
+        if not self._writer_frame_counts and self._skipped_frame_count == 0:
             return
 
         snapshot_path = self._output_dir / self._FRAME_COUNT_SNAPSHOT_FILE
         snapshot_payload = {
             "step_count": self._step_count,
             "writer_frame_counts": self._writer_frame_counts,
+            "skipped_frame_count": self._skipped_frame_count,
+            "skipped_missing_camera_counts": self._skipped_missing_camera_counts,
+            "skipped_extra_camera_counts": self._skipped_extra_camera_counts,
+            "skipped_no_rgb_count": self._skipped_no_rgb_count,
         }
         snapshot_path.write_text(json.dumps(snapshot_payload, ensure_ascii=False), encoding="utf-8")
+
+    def _record_skipped_frame(self, *, missing: set[str], extra: set[str]) -> None:
+        self._skipped_frame_count += 1
+        for camera_id in missing:
+            self._skipped_missing_camera_counts[camera_id] = (
+                self._skipped_missing_camera_counts.get(camera_id, 0) + 1
+            )
+        for camera_id in extra:
+            self._skipped_extra_camera_counts[camera_id] = (
+                self._skipped_extra_camera_counts.get(camera_id, 0) + 1
+            )
+
+    def _record_skipped_no_rgb_frame(self) -> None:
+        self._skipped_frame_count += 1
+        self._skipped_no_rgb_count += 1
 
     def _get_or_create_rgb_writer(self, camera_id: str) -> FFmpegMJPEGWriter:
         """动态创建 RGB FFmpeg 写入器"""
@@ -477,6 +517,10 @@ class FFmpegRecorder:
                 obs.arm1_gripper_state = gripper_state
                 if eef_state:
                     obs.arm1_eef_state = eef_state
+                if arm.translation:
+                    obs.translation_state = arm.translation
+                if arm.tool_io_data is not None:
+                    obs.adsorption_state = [float(arm.tool_io_data)]
             elif cid == "slave_arm2":
                 obs.arm2_joints_state = arm.joint_pos or None
                 obs.arm2_gripper_state = gripper_state
@@ -530,11 +574,11 @@ class FFmpegRecorder:
                     payload.get("right_hand_pose"), expected_length=self._VR_POSE_LENGTH
                 )
                 if head_pose is not None:
-                    obs.head_eef_state = head_pose
+                    obs.vr_head_eef_state = head_pose
                 if left_hand_pose is not None:
-                    obs.hand1_eef_state = left_hand_pose
+                    obs.vr_hand_left_eef_state = left_hand_pose
                 if right_hand_pose is not None:
-                    obs.hand2_eef_state = right_hand_pose
+                    obs.vr_hand_right_eef_state = right_hand_pose
 
         return obs
 
@@ -629,6 +673,8 @@ class FFmpegRecorder:
                 component_payload["eef_state"] = eef_state
             if arm.gripper is not None and "gripper" not in observation_fields:
                 component_payload["gripper_data"] = arm.gripper
+            if arm.translation is not None and "translation" not in observation_fields:
+                component_payload["translation_data"] = arm.translation
 
             if component_payload:
                 other_data[arm.component_id] = component_payload

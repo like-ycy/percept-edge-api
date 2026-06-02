@@ -1,17 +1,10 @@
 """上传相关 Schema"""
 
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel
 
-
-class UploadStatus(str, Enum):
-    PENDING = "pending"
-    UPLOADING = "uploading"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    INTERRUPTED = "interrupted"
+from src.schemas.status import UploadStatus
 
 
 class UploadRequest(BaseModel):

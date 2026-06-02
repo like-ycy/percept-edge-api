@@ -22,8 +22,8 @@ DEFAULT_ROS_SETUP_SCRIPT="/home/ai/workspaces/ros_env/X5_ws/devel/setup.bash"
 DEFAULT_ROSCORE_CMD="roscore"
 DEFAULT_ROS_SLAVE_CMD="roslaunch arx_x5_controller open_remote_slave.launch"
 DEFAULT_ROS_MASTER_CMD="roslaunch arx_x5_controller open_remote_master.launch"
-DEFAULT_ROBOT_OS_CWD="/home/ai/menghuhu/ontology-core"
-DEFAULT_ROBOT_OS_CMD="/usr/local/bin/python3.10 /home/ai/menghuhu/ontology-core/robot_cr4c.pyz core --run-mode mode1 --log-level INFO"
+DEFAULT_ROBOT_OS_CWD="/home/ai/workspaces/percept-edge/ontology-core"
+DEFAULT_ROBOT_OS_CMD="/usr/local/bin/python3.10 /home/ai/workspaces/percept-edge/ontology-core/robot_os.pyz core --run-mode mode1 --log-level INFO"
 DEFAULT_API_CMD="${UV_BIN} run main.py"
 DEFAULT_SUDO_PASSWORD="ai"
 API_STARTUP_TIMEOUT="${API_STARTUP_TIMEOUT:-15}"
@@ -649,7 +649,7 @@ main() {
 
   require_file "${REPO_ROOT}/main.py"
   require_file "${REPO_ROOT}/scripts/debug/wait_robot_os_ready.py"
-  require_file "/home/ai/menghuhu/ontology-core/robot_cr4c.pyz"
+  require_file "/home/ai/workspaces/percept-edge/ontology-core/robot_os.pyz"
   require_command bash
   require_command setsid
   require_command pkill

@@ -1,4 +1,4 @@
-"""固定命令 ROS 进程封装，用于 CR1 这类非 core/slave/master 结构。"""
+"""显式 ROS 命令封装，用于多工作空间或测试场景。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from desktop.adapters.base import Adapter, BuildContext, HealthProbe, ProcessSpe
 
 
 class RosCommandAdapter(Adapter):
-    """通过显式 cwd/setup/cmd 启动一个 ROS 进程。"""
+    """从构造参数直接渲染 ROS 命令的 adapter。"""
 
     def __init__(
         self,
@@ -20,7 +20,7 @@ class RosCommandAdapter(Adapter):
         cwd: str,
         setup_script: str,
         cmd: str,
-        path_prefix: str | None = None,
+        path_prefix: str = "",
     ) -> None:
         self.name = name
         self.log_label = log_label
@@ -31,21 +31,20 @@ class RosCommandAdapter(Adapter):
 
     def build_spec(self, ctx: BuildContext) -> ProcessSpec:
         cfg = get_config(ctx)
-        path_prefix = ""
-        if self._path_prefix:
-            path_prefix = f"export PATH='{self._path_prefix}':$PATH; "
+        prefix = f"export PATH='{self._path_prefix}':$PATH; " if self._path_prefix else ""
         return ProcessSpec(
             name=self.name,
-            cmd=f"{path_prefix}source '{self._setup_script}' && exec {self._cmd}",
+            cmd=f"{prefix}source '{self._setup_script}' && exec {self._cmd}",
             cwd=self._cwd,
             shell=True,
             shutdown_signal=int(_signal.SIGINT),
             shutdown_grace=cfg.ros_shutdown_grace,
+            force_kill_grace=cfg.force_kill_grace,
             shutdown_sequence=(
                 ShutdownStep(signal=int(_signal.SIGINT), grace=cfg.ros_shutdown_grace),
-                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.process_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGTERM), grace=cfg.sigterm_shutdown_grace),
+                ShutdownStep(signal=int(_signal.SIGKILL), grace=cfg.force_kill_grace),
             ),
-            force_kill_grace=cfg.force_kill_grace,
         )
 
     def build_probe(self, ctx: BuildContext) -> Optional[HealthProbe]:

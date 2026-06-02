@@ -1,6 +1,5 @@
 """SQLAlchemy 数据库模型"""
 
-import enum
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +29,14 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from src.schemas.status import (
+    CloudNotifyStatus,
+    CollectionRecordStatus,
+    TaskLocalStatus,
+    TaskStatus,
+    UploadStatus,
+)
+
 # 上海时区 (UTC+8)
 SHANGHAI_TZ = timezone(timedelta(hours=8))
 _MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "sql"
@@ -44,15 +51,6 @@ class Base(AsyncAttrs, DeclarativeBase):
     """模型基类"""
 
     pass
-
-
-class UploadStatus(enum.Enum):
-    """上传状态枚举"""
-
-    PENDING = "pending"
-    UPLOADING = "uploading"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 class Task(Base):
@@ -80,12 +78,12 @@ class Task(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
     steps: Mapped[str | None] = mapped_column(Text, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), default=TaskStatus.PENDING.value)
     collector_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     collector_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     task_created_user_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     task_updated_user_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    local_status: Mapped[str] = mapped_column(String(32), default="idle")
+    local_status: Mapped[str] = mapped_column(String(32), default=TaskLocalStatus.IDLE.value)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[int] = mapped_column(Integer, default=0)
@@ -109,22 +107,33 @@ class CollectionRecord(Base):
     frame_count: Mapped[int] = mapped_column(Integer, default=0)
     start_time: Mapped[datetime | None] = mapped_column(nullable=True)
     end_time: Mapped[datetime | None] = mapped_column(nullable=True)
-    collection_status: Mapped[str] = mapped_column(String(32), default="collecting")
+    collection_status: Mapped[str] = mapped_column(
+        String(32), default=CollectionRecordStatus.COLLECTING.value
+    )
     validation_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     validation_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     validation_result: Mapped[str | None] = mapped_column(Text, nullable=True)
     validated_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    upload_status: Mapped[str] = mapped_column(String(32), default="pending")
+    upload_status: Mapped[str] = mapped_column(String(32), default=UploadStatus.PENDING.value)
     upload_progress: Mapped[int] = mapped_column(Integer, default=0)
+    upload_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    upload_finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
     materialize_progress: Mapped[int] = mapped_column(Integer, default=0)
     materialize_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     materialized_at: Mapped[datetime | None] = mapped_column(nullable=True)
     cloud_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cloud_notify_status: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, default=CloudNotifyStatus.PENDING.value
+    )
+    cloud_notify_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cloud_notify_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    cloud_notified_at: Mapped[datetime | None] = mapped_column(nullable=True)
     output_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
     raw_capture_dir: Mapped[str | None] = mapped_column(String(255), nullable=True)
     raw_bytes: Mapped[int] = mapped_column(Integer, default=0)
     raw_frame_count: Mapped[int] = mapped_column(Integer, default=0)
     spool_sealed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    task_progress_counted: Mapped[bool] = mapped_column(Boolean, default=False)
     files: Mapped[str | None] = mapped_column(Text, nullable=True)
     task_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
 

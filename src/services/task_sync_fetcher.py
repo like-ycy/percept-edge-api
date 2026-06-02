@@ -4,6 +4,7 @@ import asyncio
 
 from loguru import logger
 
+from src.schemas.status import TaskStatus
 from src.schemas.task import CloudTask, CloudTaskDetail
 from src.services.cloud_client import CloudClient
 
@@ -27,7 +28,7 @@ class TaskSyncFetcher:
         unique_tasks: dict[int, CloudTask] = {}
         for task_list in task_lists:
             for task in task_list:
-                if task.status == "unrelease":
+                if task.status == TaskStatus.UNRELEASED.value:
                     continue
                 unique_tasks.setdefault(task.id, task)
 

@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from src.schemas.status import TaskStatus
+
 # ============ 云端数据 Schema ============
 
 
@@ -141,7 +143,7 @@ class TaskResponse(BaseModel):
     steps: list[StepResponse] = []
     case: str = ""
     instructions: list[str] = Field(default_factory=list)
-    status: str = "run"
+    status: str = TaskStatus.RUNNING.value
     collector_name: str | None = None
     task_created_user_name: str | None = None
     task_updated_user_name: str | None = None

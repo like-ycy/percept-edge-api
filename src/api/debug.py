@@ -1,17 +1,14 @@
 # src/api/debug.py
 """调试 API 路由"""
 
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends
 
 from src.core.exceptions import BusinessError
-from src.dependencies import get_process_monitor, get_webrtc_service, get_zeromq_consumer
-from src.schemas.debug import WebRTCDebugInfo, ZeroMQDebugInfo
+from src.dependencies import get_process_monitor, get_zeromq_consumer
+from src.schemas.debug import ZeroMQDebugInfo
 from src.schemas.process_monitor import ProcessMonitorResponse
 from src.schemas.response import ResponseSchema
 from src.services.process_monitor import ProcessMonitor
-from src.services.webrtc_service import WebRTCService
 from src.services.zeromq_consumer import ZeroMQConsumer
 
 router = APIRouter()
@@ -23,15 +20,6 @@ def get_zeromq_debug_info(
 ):
     """获取 ZeroMQ 调试信息"""
     info = consumer.get_debug_info()
-    return ResponseSchema(data=info)
-
-
-@router.get("/webrtc", response_model=ResponseSchema[WebRTCDebugInfo])
-def get_webrtc_debug_info(
-    webrtc: WebRTCService = Depends(get_webrtc_service),
-):
-    """获取 WebRTC 预览调试信息"""
-    info = webrtc.get_debug_info()
     return ResponseSchema(data=info)
 
 

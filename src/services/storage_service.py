@@ -9,8 +9,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import BusinessError, NotFoundError
+from src.core.path_validator import PathValidationError, validate_safe_path
 from src.models.database import CollectionRecord, Task
 from src.schemas.collection import CollectionRecordStatusEnum
+from src.schemas.status import CloudNotifyStatus, TaskStatus, UploadStatus
 from src.schemas.storage import (
     CollectionRecordCreate,
     CollectionRecordFilter,
@@ -30,6 +32,9 @@ def record_to_response(
         except (json.JSONDecodeError, TypeError):
             pass
 
+    # 派生云端通知状态
+    cloud_notify_status = _derive_cloud_notify_status(record)
+
     return CollectionRecordResponse(
         id=record.id,
         cloud_id=record.cloud_id,
@@ -43,6 +48,8 @@ def record_to_response(
         validation_status=record.validation_status,
         validation_summary=record.validation_summary,
         upload_status=record.upload_status,
+        cloud_notify_status=cloud_notify_status,
+        cloud_notify_error=record.cloud_notify_error,
         upload_progress=record.upload_progress,
         materialize_progress=record.materialize_progress,
         materialize_error=record.materialize_error,
@@ -58,19 +65,54 @@ def record_to_response(
     )
 
 
+def _derive_cloud_notify_status(record: CollectionRecord) -> str | None:
+    """派生云端通知状态供前端展示。
+
+    优先级：
+    1. 文件未上传完成 → None（不适用）
+    2. 已有 cloud_id → completed
+    3. 数据库有明确状态 → 返回数据库状态
+    4. 已上传但无 cloud_id 且无数据库状态 → failed（历史兼容）
+    """
+    if record.upload_status != UploadStatus.COMPLETED.value:
+        return None
+    if record.cloud_id is not None:
+        return CloudNotifyStatus.COMPLETED.value
+    if record.cloud_notify_status:
+        return record.cloud_notify_status
+    # 历史数据兼容：已上传但无 cloud_id 且无 cloud_notify_status
+    return CloudNotifyStatus.FAILED.value
+
+
 class DatabaseStorageService:
     """数据库驱动的存储服务"""
 
-    _PROGRESS_COUNTED_STATUSES = {
-        CollectionRecordStatusEnum.FINALIZING.value,
-        CollectionRecordStatusEnum.VALIDATING.value,
-        CollectionRecordStatusEnum.COMPLETED.value,
-        CollectionRecordStatusEnum.FINALIZE_FAILED.value,
-        CollectionRecordStatusEnum.VALIDATION_FAILED.value,
-    }
-
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _validate_output_dir(output_dir: str) -> Path:
+        try:
+            return validate_safe_path(
+                output_dir,
+                allow_relative=False,
+            )
+        except PathValidationError as exc:
+            raise BusinessError(f"output_dir 路径非法: {exc}") from exc
+
+    @classmethod
+    def _validate_capture_dir(cls, raw_capture_dir: str, output_dir: str | None) -> Path:
+        allowed_base = None
+        if output_dir:
+            allowed_base = cls._validate_output_dir(output_dir)
+        try:
+            return validate_safe_path(
+                raw_capture_dir,
+                allowed_base=allowed_base,
+                allow_relative=False,
+            )
+        except PathValidationError as exc:
+            raise BusinessError(f"raw spool 路径非法: {exc}") from exc
 
     async def get_record_by_id(self, record_id: int, user_id: int) -> CollectionRecord:
         query = select(CollectionRecord).where(
@@ -96,7 +138,7 @@ class DatabaseStorageService:
     async def _rollback_task_progress_for_deleted_record(self, record: CollectionRecord) -> None:
         if record.task_id is None:
             return
-        if record.collection_status not in self._PROGRESS_COUNTED_STATUSES:
+        if not record.task_progress_counted:
             return
 
         result = await self.db.execute(
@@ -109,12 +151,12 @@ class DatabaseStorageService:
         task.progress = max(task.progress - 1, 0)
         previous_status = task.status
         if task.progress == 0:
-            task.status = "pending"
+            task.status = TaskStatus.PENDING.value
         elif task.progress < task.repeat:
-            if previous_status not in ("stop", "paused"):
-                task.status = "run"
+            if previous_status not in (TaskStatus.STOPPED.value, TaskStatus.PAUSED.value):
+                task.status = TaskStatus.RUNNING.value
         else:
-            task.status = "completed"
+            task.status = TaskStatus.COMPLETED.value
 
         logger.info(
             "删除采集记录后回滚任务进度: record_id={}, task_id={}, progress={}/{}, status={}",
@@ -124,6 +166,7 @@ class DatabaseStorageService:
             task.repeat,
             task.status,
         )
+        record.task_progress_counted = False
 
     @staticmethod
     def remove_local_record_data(record: CollectionRecord) -> None:
@@ -230,8 +273,17 @@ class DatabaseStorageService:
             CollectionRecordStatusEnum.FINALIZING.value,
         }:
             raise BusinessError("当前记录状态不支持重试整理")
-        if not record.raw_capture_dir or not Path(record.raw_capture_dir).exists():
+        if not record.raw_capture_dir:
             raise BusinessError("raw spool 不存在，无法重试整理")
+        capture_dir = self._validate_capture_dir(record.raw_capture_dir, record.output_dir)
+        if not capture_dir.exists():
+            raise BusinessError("raw spool 不存在，无法重试整理")
+        manifest_path = capture_dir / "manifest.json"
+        sealed_path = capture_dir / "SEALED"
+        if not manifest_path.exists():
+            raise BusinessError("raw spool 缺少 manifest.json，无法重试整理")
+        if not sealed_path.exists():
+            raise BusinessError("raw spool 未 seal，无法重试整理")
 
         if record.collection_status == CollectionRecordStatusEnum.FINALIZE_FAILED.value:
             record.collection_status = CollectionRecordStatusEnum.FINALIZING.value

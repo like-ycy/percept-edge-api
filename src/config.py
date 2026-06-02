@@ -181,66 +181,19 @@ class ZeromqSettings(BaseModel):
     """ZeroMQ 配置"""
 
     endpoint: str = "ipc:///tmp/robotos_collection"
+    # deprecated: monitor 查询已迁移到 command_endpoint，保留仅兼容旧配置
     rep_endpoint: str = "ipc:///tmp/robotos_monitor"
-
-
-class WebrtcPreviewSettings(BaseModel):
-    """WebRTC 预览优化配置。"""
-
-    enabled: bool = True
-    max_width: int = Field(default=1920, gt=0, le=1920)
-    max_height: int = Field(default=540, gt=0, le=1080)
-    max_fps: float = Field(default=15.0, gt=0.0, le=30.0)
-    fallback_width: int = Field(default=640, gt=0, le=1920)
-    fallback_height: int = Field(default=360, gt=0, le=1080)
-    max_encoded_frame_bytes: int = Field(default=16 * 1024 * 1024, gt=0, le=64 * 1024 * 1024)
-    adaptive: "WebrtcAdaptiveSettings" = Field(default_factory=lambda: WebrtcAdaptiveSettings())
-
-
-class WebrtcCodecSettings(BaseModel):
-    """WebRTC 编码协商配置。"""
-
-    enabled: bool = True
-    preferred: list[str] = Field(default_factory=lambda: ["video/H264", "video/VP8"])
-
-
-class WebrtcAdaptiveProfileSettings(BaseModel):
-    """WebRTC 预览自适应档位。"""
-
-    name: str
-    max_width: int = Field(gt=0, le=1920)
-    max_height: int = Field(gt=0, le=1080)
-    max_fps: float = Field(gt=0.0, le=30.0)
-
-
-class WebrtcAdaptiveSettings(BaseModel):
-    """WebRTC 预览自适应降级配置。"""
-
-    enabled: bool = False
-    check_interval_seconds: float = Field(default=5.0, ge=0.0)
-    cooldown_seconds: float = Field(default=15.0, ge=0.0)
-    decode_ms_high: float = Field(default=30.0, ge=0.0)
-    recv_ms_high: float = Field(default=50.0, ge=0.0)
-    reuse_ratio_high: float = Field(default=0.5, ge=0.0, le=1.0)
-    profiles: list[WebrtcAdaptiveProfileSettings] = Field(
-        default_factory=lambda: [
-            WebrtcAdaptiveProfileSettings(
-                name="high", max_width=1920, max_height=540, max_fps=15.0
-            ),
-            WebrtcAdaptiveProfileSettings(
-                name="medium", max_width=1280, max_height=360, max_fps=12.0
-            ),
-            WebrtcAdaptiveProfileSettings(name="low", max_width=960, max_height=270, max_fps=10.0),
-        ]
-    )
+    command_endpoint: str = "ipc:///tmp/robotos_command"
+    enable_runtime_watchdog: bool = True
+    stale_threshold_seconds: float = Field(default=5.0, gt=0.0)
+    watchdog_interval_seconds: float = Field(default=1.0, gt=0.0)
+    startup_grace_seconds: float = Field(default=5.0, ge=0.0)
 
 
 class WebrtcSettings(BaseModel):
     """WebRTC 配置"""
 
     stun_server: str = "stun:stun.l.google.com:19302"
-    preview: WebrtcPreviewSettings = Field(default_factory=WebrtcPreviewSettings)
-    codec: WebrtcCodecSettings = Field(default_factory=WebrtcCodecSettings)
 
 
 class StorageSettings(BaseModel):
@@ -316,6 +269,17 @@ class ProcessMonitorSettings(BaseModel):
     cmdline_max_length: int = Field(default=200, gt=0)
 
 
+class DesktopRosCommandSettings(BaseModel):
+    """桌面端显式 ROS 命令配置，用于 CR1 等多 ROS 工作空间机型。"""
+
+    name: str
+    log_label: str
+    cwd: str
+    setup_script: str
+    cmd: str
+    path_prefix: str = ""
+
+
 class DesktopRuntimeSettings(BaseModel):
     """桌面端多进程运行时配置。"""
 
@@ -340,7 +304,9 @@ class DesktopRuntimeSettings(BaseModel):
     ros_startup_grace: float = Field(default=3.0, ge=0.0)
     roscore_startup_grace: float = Field(default=2.0, ge=0.0)
     process_shutdown_grace: float = Field(default=5.0, ge=0.0)
-    ros_shutdown_grace: float = Field(default=10.0, ge=0.0)
+    ros_shutdown_grace: float = Field(default=8.0, ge=0.0)
+    sigterm_shutdown_grace: float = Field(default=5.0, ge=0.0)
+    api_shutdown_grace: float = Field(default=60.0, ge=0.0)
     force_kill_grace: float = Field(default=2.0, ge=0.0)
     ready_timeout: float = Field(default=30.0, gt=0.0)
     monitor_timeout: float = Field(default=0.5, gt=0.0)
@@ -353,12 +319,15 @@ class DesktopRuntimeSettings(BaseModel):
     vr_ros_serial_cwd: str = ""
     vr_ros_serial_setup_script: str = ""
     vr_ros_serial_cmd: str = "rosrun serial_port serial_port"
+    ros_commands: list[DesktopRosCommandSettings] = Field(default_factory=list)
 
 
 class DesktopLiftSettings(BaseModel):
     """桌面端升降台控制配置。"""
 
     enabled: bool = False
+    transport: str = "script"
+    api_path: str = "/api/desktop/lift/height"
     python_bin: str = "/usr/local/bin/python3.10"
     script_path: str = ""
     min_height: int = Field(default=0, ge=0)
@@ -371,6 +340,20 @@ class DesktopSettings(BaseModel):
 
     runtime: DesktopRuntimeSettings = Field(default_factory=DesktopRuntimeSettings)
     lift: DesktopLiftSettings = Field(default_factory=DesktopLiftSettings)
+
+
+class ElectromagnetControlSettings(BaseModel):
+    """电磁铁控制能力配置。"""
+
+    enabled: bool = False
+
+
+class RobotControlSettings(BaseModel):
+    """机器人控制能力配置。"""
+
+    electromagnet: ElectromagnetControlSettings = Field(
+        default_factory=ElectromagnetControlSettings
+    )
 
 
 class Settings(BaseSettings):
@@ -394,6 +377,7 @@ class Settings(BaseSettings):
     collection: CollectionSettings = Field(default_factory=CollectionSettings)
     process_monitor: ProcessMonitorSettings = Field(default_factory=ProcessMonitorSettings)
     desktop: DesktopSettings = Field(default_factory=DesktopSettings)
+    robot_control: RobotControlSettings = Field(default_factory=RobotControlSettings)
 
     @classmethod
     def settings_customise_sources(
