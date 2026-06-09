@@ -19,6 +19,7 @@ from libs.contracts.schema.episode_dataclass import Metadata
 from src.models.database import CollectionRecord, Task
 from src.schemas.collection import CollectionRecordStatusEnum
 from src.services.collection_record_store import CollectionRecordStore
+from src.services.collection_output_naming import require_valid_filename_prefix
 from src.services.ffmpeg_recorder import FFmpegRecorder
 from src.services.raw_frame_spool import _HEADER_STRUCT, _RECORD_MAGIC
 from src.services.task_converter import deserialize_instructions
@@ -306,7 +307,7 @@ class CollectionMaterializer:
     ) -> str:
         filename_prefix = manifest.get("filename_prefix")
         if isinstance(filename_prefix, str) and filename_prefix.strip():
-            return filename_prefix
+            return require_valid_filename_prefix(filename_prefix)
 
         generated_prefix = FFmpegRecorder.build_default_filename_prefix(start_time)
         manifest["filename_prefix"] = generated_prefix
@@ -415,27 +416,24 @@ class CollectionMaterializer:
         video_only: bool = False,
         filename_prefix: str = "",
     ) -> list[str]:
+        prefix = require_valid_filename_prefix(filename_prefix)
         materialized_files = []
         for file in sorted(output_dir.iterdir()):
             if not file.is_file():
                 continue
-            if video_only:
-                if (
-                    file.suffix == ".mp4"
-                    and file.name.startswith(f"{filename_prefix}_")
-                    and file.name.endswith("_rgb.mp4")
-                ):
-                    materialized_files.append(str(file.absolute()))
+            if file.name == f"{prefix}.json":
+                materialized_files.append(str(file.absolute()))
                 continue
-            if file.suffix in {".mp4", ".json", ".snapshot"}:
+            if file.suffix == ".mp4" and file.name.startswith(f"{prefix}_"):
                 materialized_files.append(str(file.absolute()))
         return materialized_files
 
     @staticmethod
     def _cleanup_video_only_outputs(output_dir: Path, filename_prefix: str) -> None:
+        prefix = require_valid_filename_prefix(filename_prefix)
         stale_files = [
-            *output_dir.glob(f"{filename_prefix}*.mp4"),
-            output_dir / f"{filename_prefix}.json",
+            *output_dir.glob(f"{prefix}*.mp4"),
+            output_dir / f"{prefix}.json",
             output_dir / "writer_frame_counts.snapshot",
         ]
         for stale_file in stale_files:

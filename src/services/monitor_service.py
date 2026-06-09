@@ -2,12 +2,12 @@
 """Monitor 服务 — 缓存管理、定时轮询、Metadata 映射"""
 
 import asyncio
-import re
+
 from datetime import datetime, timezone
 
 from loguru import logger
 
-from libs.contracts.schema.episode_dataclass import CameraInfo, Metadata
+from libs.contracts.schema.episode_dataclass import Metadata
 from src.schemas.monitor import (
     ComponentStatus,
     CpuInfo,
@@ -19,14 +19,6 @@ from src.schemas.monitor import (
     SystemInfo,
 )
 from src.services.robot_command_service import RobotCommandService
-
-# 组件 ID 到 Metadata 字段的映射
-_ARM_FIELD_MAP = {
-    "slave_arm1": "robot_arm1",
-    "slave_arm2": "robot_arm2",
-    "master_arm1": "robot_master_arm1",
-    "master_arm2": "robot_master_arm2",
-}
 
 
 class MonitorService:
@@ -100,7 +92,7 @@ class MonitorService:
         metadata = RobotMetadataInfo(
             robot_model=metadata_raw.get("robot_model", ""),
             robot_type=metadata_raw.get("robot_type", ""),
-            robot_desc=metadata_raw.get("robot_desc", []),
+            robot_desc=self._extract_robot_description_lines(metadata_raw),
             robot_register_info=register_info if isinstance(register_info, dict) else None,
         )
 
@@ -136,76 +128,48 @@ class MonitorService:
         return bool(self._system_cache) and bool(self._robot_cache)
 
     def build_metadata(self) -> Metadata:
-        """从 monitor 缓存构建预填充的 Metadata
-
-        返回包含所有可从 monitor 获取的字段的 Metadata 对象。
-        采集时再补充 num_steps、experiment_time 等运行时数据。
-        """
+        """Build episode Metadata from the current monitor cache."""
         if not self._robot_cache:
-            return Metadata(
-                dataset_name=None,
-                episode_id=None,
-                num_steps=0,
-            )
+            return Metadata(num_steps=0)
 
         metadata_raw = self._robot_cache.get("metadata", {})
-        kwargs: dict = {
-            "dataset_name": None,
-            "episode_id": None,
-            "num_steps": 0,
-            "robot_name": metadata_raw.get("robot_model"),
-            "robot_type": metadata_raw.get("robot_type"),
-            "robot_description": "\n".join(metadata_raw.get("robot_desc", [])) or None,
-        }
+        robot_description = "\n".join(self._extract_robot_description_lines(metadata_raw))
 
-        # 遍历组件，填充相机和机械臂字段
-        sample_rate_set = False
+        return Metadata(
+            sample_rate=self._extract_sample_rate(),
+            num_steps=0,
+            robot_name=metadata_raw.get("robot_model"),
+            robot_type=metadata_raw.get("robot_type"),
+            robot_description=robot_description or None,
+        )
+
+    @staticmethod
+    def _extract_robot_description_lines(metadata_raw: dict) -> list[str]:
+        for key in ("robot_description", "robot_desc"):
+            raw_value = metadata_raw.get(key)
+            if isinstance(raw_value, str):
+                line = raw_value.strip()
+                if line:
+                    return [line]
+                continue
+            if isinstance(raw_value, list):
+                lines = [
+                    item.strip() for item in raw_value if isinstance(item, str) and item.strip()
+                ]
+                if lines:
+                    return lines
+        return []
+
+    def _extract_sample_rate(self) -> int | None:
         for key, value in self._robot_cache.items():
             if key == "metadata" or not isinstance(value, dict):
                 continue
-
-            # 相机组件（以 camera 开头）
-            camera_match = re.match(r"^camera(\d+)$", key)
-            if camera_match:
-                cam_num = camera_match.group(1)
-                width = value.get("width")
-                height = value.get("height")
-
-                # sample_rate: 取第一个相机的 hz
-                if not sample_rate_set and value.get("hz"):
-                    kwargs["sample_rate"] = value["hz"]
-                    sample_rate_set = True
-
-                # RGB 分辨率
-                if width and height:
-                    kwargs[f"camera{cam_num}_rgb_resolution"] = [height, width]
-
-                # 深度分辨率和 scale（仅有 depth_scale 的相机）
-                if value.get("depth_scale") is not None:
-                    if width and height:
-                        kwargs[f"camera{cam_num}_depth_resolution"] = [height, width]
-                    kwargs[f"camera{cam_num}_depth_scale"] = value["depth_scale"]
-
-                # 相机型号信息
-                if value.get("brand") and value.get("model"):
-                    kwargs[f"camera{cam_num}_model_info"] = CameraInfo(
-                        brand=value["brand"],
-                        model=value["model"],
-                        detail=value.get("detail"),
-                    )
+            hz = value.get("hz")
+            if isinstance(hz, bool):
                 continue
-
-            # 机械臂组件
-            if key in _ARM_FIELD_MAP:
-                prefix = _ARM_FIELD_MAP[key]
-                if value.get("joint_data_dim") is not None:
-                    kwargs[f"{prefix}_joints_state_dim"] = value["joint_data_dim"]
-                if value.get("eef_data_dim") is not None:
-                    kwargs[f"{prefix}_eef_state_dim"] = value["eef_data_dim"]
-                if value.get("gripper_data_dim") is not None:
-                    kwargs[f"{prefix}_gripper_state_dim"] = value["gripper_data_dim"]
-
-        return Metadata(**kwargs)
+            if isinstance(hz, int) and hz > 0:
+                return hz
+        return None
 
     @property
     def last_update(self) -> datetime | None:

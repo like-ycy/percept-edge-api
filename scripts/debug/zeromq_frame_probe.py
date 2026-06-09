@@ -25,6 +25,13 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _camera_component_to_view_base(component_id: str) -> str:
+    sys.path.append(str(_repo_root()))
+    from src.services.collection_output_naming import camera_component_to_view_base
+
+    return camera_component_to_view_base(component_id)
+
+
 def _load_default_endpoint() -> str:
     sys.path.append(str(_repo_root()))
     from src.config import get_settings
@@ -69,6 +76,22 @@ def _collect_camera_ids(frames: Iterable[dict]) -> list[str]:
             if component_id:
                 camera_ids.add(component_id)
     return sorted(camera_ids)
+
+
+def _collect_camera_views(frames: Iterable[dict]) -> Dict[str, str]:
+    camera_views: Dict[str, str] = {}
+    for frame in frames:
+        frame_data = frame.get("data") or {}
+        if "color_data" not in frame_data and "depth_data" not in frame_data:
+            continue
+        component_id = frame.get("component_id")
+        if not component_id:
+            continue
+        try:
+            camera_views[component_id] = _camera_component_to_view_base(component_id)
+        except ValueError:
+            camera_views[component_id] = "invalid-camera-component"
+    return camera_views
 
 
 def _collect_crc32(frames: Iterable[dict]) -> Dict[str, Dict[str, int | None]]:
@@ -165,6 +188,7 @@ def main() -> None:
                 "delta_ts": delta_ts,
                 "timestamp_changed": timestamp_changed,
                 "camera_set": camera_set,
+                "camera_views": _collect_camera_views(frames),
                 "camera_set_changed": camera_set_changed,
                 "crc32": crc_map,
                 "crc32_changed": crc_changed,

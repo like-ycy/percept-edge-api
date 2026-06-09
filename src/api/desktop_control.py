@@ -12,6 +12,9 @@ from src.services.robot_command_service import RobotCommandService
 
 router = APIRouter()
 
+TRANSLATION_RAIL_COMPONENT_ID = "translation_rail"
+LIFT_HEIGHT_ACTION = "lift/set_height"
+
 
 @router.post("/lift/height", response_model=ResponseSchema[LiftHeightResponse])
 async def set_lift_height(
@@ -21,15 +24,15 @@ async def set_lift_height(
 ):
     """设置 Desktop 本地升降台高度。"""
     result = await robot_command_service.execute_command(
-        component_id="slave_arm1",
-        action="lift/set_height",
+        component_id=TRANSLATION_RAIL_COMPONENT_ID,
+        action=LIFT_HEIGHT_ACTION,
         args={"height": payload.height},
     )
     return ResponseSchema(
         data=LiftHeightResponse(
             height=payload.height,
-            component_id="slave_arm1",
-            action="lift/set_height",
+            component_id=TRANSLATION_RAIL_COMPONENT_ID,
+            action=LIFT_HEIGHT_ACTION,
             result=result.get("result", {}),
         )
     )

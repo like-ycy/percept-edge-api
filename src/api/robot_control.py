@@ -14,6 +14,9 @@ from src.services.robot_command_service import RobotCommandService
 
 router = APIRouter()
 
+TOOL_IO_COMPONENT_ID = "tool_io"
+ELECTROMAGNET_ACTION = "tool_do/set"
+
 
 @router.post("/electromagnet", response_model=ResponseSchema[ElectromagnetToggleResponse])
 async def set_electromagnet(
@@ -24,15 +27,15 @@ async def set_electromagnet(
 ):
     """设置 CR5 末端电磁铁开关。"""
     result = await robot_command_service.execute_command(
-        component_id="slave_arm1",
-        action="tool_do/set",
+        component_id=TOOL_IO_COMPONENT_ID,
+        action=ELECTROMAGNET_ACTION,
         args={"enable": request.enabled},
     )
     return ResponseSchema(
         data=ElectromagnetToggleResponse(
             enabled=request.enabled,
-            component_id="slave_arm1",
-            action="tool_do/set",
+            component_id=TOOL_IO_COMPONENT_ID,
+            action=ELECTROMAGNET_ACTION,
             result=result.get("result", {}),
         )
     )

@@ -35,12 +35,12 @@ CollectionSinkFailureHandler = Callable[[Exception], Awaitable[None] | None]
 ArmFrameBuildTimingHandler = Callable[[str, float, int], None]
 
 
-def _parse_eef_values(value, has_gripper_data: bool) -> list[float] | None:
+def _parse_eef_values(value) -> list[float] | None:
     if value is None:
         return None
     if isinstance(value, list | tuple):
         values = [float(item) for item in value if isinstance(item, int | float)]
-        return values[:-1] if has_gripper_data else values
+        return values or None
     return None
 
 
@@ -127,7 +127,7 @@ def parse_zmq_message(
         elif "joint_data" in frame_data:
             joint = frame_data["joint_data"]
             eef = frame_data.get("eef_data")
-            has_gripper_data = frame_data.get("gripper_data") is not None
+
             arm_build_start_ns = time.perf_counter_ns()
             try:
                 arms.append(
@@ -139,7 +139,7 @@ def parse_zmq_message(
                         joint_cur=joint.get("joint_cur", []),
                         joint_eff=joint.get("joint_eff", []),
                         joint_force=joint.get("joint_force", []),
-                        eef=_parse_eef_values(eef, has_gripper_data),
+                        eef=_parse_eef_values(eef),
                         gripper=_parse_gripper_value(frame_data),
                         translation=_parse_float_list(frame_data.get("translation_data")),
                         tool_io_data=_parse_tool_io_data(frame_data.get("tool_io_data")),

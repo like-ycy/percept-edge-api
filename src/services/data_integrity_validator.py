@@ -15,6 +15,10 @@ from src.schemas.validation import (
     ValidationResult,
     ValidationStatusEnum,
 )
+from src.services.collection_output_naming import (
+    camera_component_to_view_base,
+    extract_materialized_video_view,
+)
 from src.services.monitor_service import MonitorService
 from src.utils.ffprobe import ffprobe_frames
 
@@ -171,31 +175,39 @@ class DataIntegrityValidator:
                 summary="目录不存在或不是有效目录",
             )
 
-        found_files = sorted(file.name for file in directory.glob("*.mp4") if file.is_file())
+        try:
+            episode_path, expected_steps = self._read_episode_steps(directory)
+            self._episode_file_name = episode_path.name
+        except Exception as exc:
+            return self._build_failed_result(
+                directory=directory,
+                expected_steps=expected_frames,
+                error=FileValidationError(
+                    file_name="",
+                    error_type="json_error",
+                    message=str(exc),
+                ),
+                summary=f"读取 episode json 失败: {exc}",
+            )
+
+        found_mp4 = sorted(file.name for file in directory.glob("*.mp4") if file.is_file())
+        found_files = [episode_path.name, *found_mp4]
+
         errors: list[FileValidationError] = []
-        if len(found_files) != 1:
+        rgb_files = [name for name in found_mp4 if name.endswith("_rgb.mp4")]
+        forbidden_files = sorted(
+            file.name
+            for file in directory.iterdir()
+            if file.is_file() and (file.suffix == ".snapshot" or file.name.endswith("_depth.mp4"))
+        )
+        if len(rgb_files) != 1:
             errors.append(
                 FileValidationError(
                     file_name="",
                     error_type="video_only_file_count",
-                    message=f"video_only 模式期望 1 个 mp4，实际 {len(found_files)} 个",
+                    message=f"video_only 模式期望 1 个 RGB mp4，实际 {len(rgb_files)} 个",
                 )
             )
-        elif not found_files[0].endswith("_rgb.mp4"):
-            errors.append(
-                FileValidationError(
-                    file_name=found_files[0],
-                    error_type="video_only_file_name",
-                    message=f"video_only 模式只允许 RGB mp4: {found_files[0]}",
-                )
-            )
-
-        forbidden_files = sorted(
-            file.name
-            for file in directory.iterdir()
-            if file.is_file()
-            and (file.suffix in {".json", ".snapshot"} or file.name.endswith("_depth.mp4"))
-        )
         for file_name in forbidden_files:
             errors.append(
                 FileValidationError(
@@ -205,17 +217,20 @@ class DataIntegrityValidator:
                 )
             )
 
+        expected_file_list = (
+            [episode_path.name, rgb_files[0]]
+            if len(rgb_files) == 1
+            else [episode_path.name, "*_rgb.mp4"]
+        )
         frame_errors: list[FileValidationError] = []
-        if mode == "full" and len(found_files) == 1:
+        if mode == "full" and len(rgb_files) == 1:
             frame_errors = await self._validate_all_video_frames(
-                [directory / found_files[0]], expected_frames
+                [directory / rgb_files[0]], expected_frames
             )
 
         errors.extend(frame_errors)
-        missing_files = ["*.mp4"] if not found_files else []
-        extra_files = (
-            [*found_files[1:], *forbidden_files] if len(found_files) > 1 else forbidden_files
-        )
+        missing_files = []
+        extra_files = forbidden_files
         status = self._determine_status(errors, missing_files, extra_files)
         summary = self._generate_summary(
             status,
@@ -230,7 +245,7 @@ class DataIntegrityValidator:
             status=status,
             directory=str(directory),
             expected_steps=expected_frames,
-            expected_files=[found_files[0]] if len(found_files) == 1 else ["*.mp4"],
+            expected_files=expected_file_list,
             found_files=found_files,
             missing_files=missing_files,
             extra_files=extra_files,
@@ -298,12 +313,12 @@ class DataIntegrityValidator:
                 summary="MonitorService 缓存未就绪",
             )
 
-        expected_files = self._generate_expected_files(robot_status.components)
-
         # 4. 获取实际文件列表
         found_files = sorted(
             [f.name for f in directory.glob("*.mp4") if self._extract_camera_id(f.name) is not None]
         )
+
+        expected_files = self._generate_expected_files(robot_status.components, found_files)
 
         # 5. 校验文件名完整性
         expected_set = set(expected_files)
@@ -394,11 +409,14 @@ class DataIntegrityValidator:
         step_count = payload.get("step_count")
         return (step_count if isinstance(step_count, int) else None), frame_counts
 
-    def _generate_expected_files(self, components: list[ComponentStatus]) -> list[str]:
+    def _generate_expected_files(
+        self, components: list[ComponentStatus], found_files: list[str] | None = None
+    ) -> list[str]:
         """从 monitor 数据动态生成期望文件名
 
         Args:
             components: 组件状态列表
+            found_files: 当前目录中已经识别为本次采集产物的 mp4 文件名
 
         Returns:
             期望的文件名列表（已排序）
@@ -407,25 +425,49 @@ class DataIntegrityValidator:
             raise ValueError("缺少 episode 文件名，无法生成期望视频文件名")
 
         episode_stem = Path(self._episode_file_name).stem
-        expected = []
+        found_streams = self._collect_found_camera_streams(episode_stem, found_files)
+        expected: set[str] = set()
         for comp in components:
-            # 只处理已连接的相机
             if comp.connect_status != "connected":
                 continue
-
-            camera_id = comp.component_id
-            if not camera_id.startswith("camera"):
+            try:
+                view_base = camera_component_to_view_base(comp.component_id)
+            except ValueError:
                 continue
 
-            # RGB 判断：jpeg_quality 或 width/height 存在
-            if comp.jpeg_quality is not None or (comp.width and comp.height):
-                expected.append(f"{episode_stem}_{camera_id}_rgb.mp4")
-
-            # Depth 判断：depth_scale 存在
+            expected.add(f"{episode_stem}_{view_base}_rgb.mp4")
             if comp.depth_scale is not None:
-                expected.append(f"{episode_stem}_{camera_id}_depth.mp4")
+                expected.add(f"{episode_stem}_{view_base}_depth.mp4")
+            for stream_type in found_streams.get(view_base, set()):
+                expected.add(f"{episode_stem}_{view_base}_{stream_type}.mp4")
 
         return sorted(expected)
+
+    def _collect_found_camera_streams(
+        self, episode_stem: str, found_files: list[str] | None
+    ) -> dict[str, set[str]]:
+        streams: dict[str, set[str]] = {}
+        for file_name in found_files or []:
+            view_name = extract_materialized_video_view(episode_stem, file_name)
+            if view_name is None:
+                continue
+            parsed = self._split_video_view(view_name)
+            if parsed is None:
+                continue
+            view_base, stream_type = parsed
+            streams.setdefault(view_base, set()).add(stream_type)
+        return streams
+
+    @staticmethod
+    def _split_video_view(view_name: str) -> tuple[str, str] | None:
+        for stream_type in ("rgb", "depth"):
+            suffix = f"_{stream_type}"
+            if not view_name.endswith(suffix):
+                continue
+            view_base = view_name[: -len(suffix)]
+            if view_base:
+                return view_base, stream_type
+        return None
 
     def _read_episode_steps(self, directory: Path) -> tuple[Path, int]:
         json_files = sorted(directory.glob("*.json"))
@@ -449,13 +491,9 @@ class DataIntegrityValidator:
             raise ValueError(f"{episode_path.name} 格式错误: {e}") from e
 
     def _extract_camera_id(self, file_name: str) -> str | None:
-        parts = Path(file_name).stem.split("_")
-        if len(parts) < 3:
+        if not self._episode_file_name:
             return None
-        if parts[-1] not in {"rgb", "depth"}:
-            return None
-        camera_id = parts[-2]
-        return camera_id if camera_id.startswith("camera") else None
+        return extract_materialized_video_view(Path(self._episode_file_name).stem, file_name)
 
     async def _validate_all_video_frames(
         self, video_files: list[Path], expected_frames: int

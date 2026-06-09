@@ -93,7 +93,7 @@ class CameraFrame:
 class ArmFrame:
     """机械臂帧数据（关节 + 末端执行器合一）
 
-    新格式中每个机械臂组件（如 slave_arm1）同时包含 joint_data 和 eef_data。
+    新格式中每个机械臂组件（如 arm_left）同时包含 joint_data 和 eef_data。
     使用 slots=True 优化内存占用和访问速度。
     """
 
