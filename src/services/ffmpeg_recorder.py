@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, ClassVar
+from typing import Any
 
 from loguru import logger
 
@@ -41,15 +41,6 @@ class FFmpegRecorder:
 
     _FRAME_COUNT_SNAPSHOT_FILE = "writer_frame_counts.snapshot"
     _VR_POSE_LENGTH = 16
-    _W1_BASE_KEYS: ClassVar[tuple[str, ...]] = (
-        "linear_x",
-        "linear_y",
-        "angular_z",
-        "left_wheel_speed_rpm",
-        "right_wheel_speed_rpm",
-        "left_wheel_current_a",
-        "right_wheel_current_a",
-    )
 
     def __init__(
         self,
@@ -435,7 +426,7 @@ class FFmpegRecorder:
         for extra in frame.extras:
             payload = extra.payload
             if extra.component_id == "agv":
-                base_state = self._extract_base_state_w1(payload)
+                base_state = self._extract_base_state(payload)
                 if base_state is not None:
                     obs.base_state = base_state
             elif extra.component_id == "lift":
@@ -493,15 +484,17 @@ class FFmpegRecorder:
         return result
 
     @staticmethod
-    def _extract_base_state_w1(payload: dict[str, Any]) -> list[float] | None:
+    def _extract_base_state(payload: dict[str, Any]) -> list[float] | None:
         pose_data = payload.get("pose_data")
         if not isinstance(pose_data, dict):
             return None
 
         result: list[float] = []
-        for key in FFmpegRecorder._W1_BASE_KEYS:
-            value = FFmpegRecorder._coerce_float(pose_data.get(key))
-            result.append(value if value is not None else 0.0)
+        for value in pose_data.values():
+            value_float = FFmpegRecorder._coerce_float(value)
+            if value_float is None:
+                return None
+            result.append(value_float)
         return result
 
     @staticmethod
