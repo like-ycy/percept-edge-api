@@ -10,4 +10,4 @@ timeout = 30
 
 [upload]
 remote_host = "192.168.21.139"
-remote_path = "/mnt/nas-200t-hdd/collection_data/CR4c"
+remote_path = "/mnt/nas-200t-hdd/collection_data/CR5"
