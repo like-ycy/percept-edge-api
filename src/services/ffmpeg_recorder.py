@@ -41,6 +41,12 @@ class FFmpegRecorder:
 
     _FRAME_COUNT_SNAPSHOT_FILE = "writer_frame_counts.snapshot"
     _VR_POSE_LENGTH = 16
+    _GRIPPER_EXTRA_FIELDS = {
+        "gripper_left": "gripper_left_state",
+        "gripper_right": "gripper_right_state",
+        "master_gripper_left": "master_gripper_left_state",
+        "master_gripper_right": "master_gripper_right_state",
+    }
 
     def __init__(
         self,
@@ -151,7 +157,7 @@ class FFmpegRecorder:
                 if camera.color_data:
                     self._get_or_create_rgb_writer(camera.component_id).write(camera.color_data)
                     self._steps.append(
-                        Step(observation=Observation(timestamp=int(frame.timestamp * 1000)))
+                        Step(observation=Observation(timestamp=int(frame.timestamp)))
                     )
                     self._step_count += 1
                     return True
@@ -368,7 +374,7 @@ class FFmpegRecorder:
         return build_video_filename(self._filename_prefix, camera_id, stream_type)
 
     def _convert_to_observation(self, frame: ZmqFrame) -> Observation:
-        obs = Observation(timestamp=int(frame.timestamp * 1000))
+        obs = Observation(timestamp=int(frame.timestamp))
 
         for arm in frame.arms:
             cid = arm.component_id
@@ -425,7 +431,12 @@ class FFmpegRecorder:
 
         for extra in frame.extras:
             payload = extra.payload
-            if extra.component_id == "agv":
+            gripper_field = self._GRIPPER_EXTRA_FIELDS.get(extra.component_id)
+            if gripper_field is not None:
+                gripper_state = self._extract_gripper_state(payload)
+                if gripper_state is not None:
+                    setattr(obs, gripper_field, gripper_state)
+            elif extra.component_id == "agv":
                 base_state = self._extract_base_state(payload)
                 if base_state is not None:
                     obs.base_state = base_state
@@ -465,6 +476,10 @@ class FFmpegRecorder:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return None
         return float(value)
+
+    @staticmethod
+    def _extract_gripper_state(payload: dict[str, Any]) -> list[float] | None:
+        return FFmpegRecorder._extract_float_list(payload.get("gripper_data"))
 
     @staticmethod
     def _extract_float_list(

@@ -594,7 +594,19 @@ async def _recover_interrupted_uploads(context: AppContext) -> None:
             record.cloud_notify_status = CloudNotifyStatus.FAILED.value
             record.cloud_notify_error = "应用重启时发现云端通知中断"
 
-        if uploading_records or notifying_records:
+        pending_notify_result = await session.execute(
+            select(CollectionRecord).where(
+                CollectionRecord.upload_status == UploadStatus.COMPLETED.value,
+                CollectionRecord.cloud_id.is_(None),
+                CollectionRecord.cloud_notify_status == CloudNotifyStatus.PENDING.value,
+            )
+        )
+        pending_notify_records = pending_notify_result.scalars().all()
+        for record in pending_notify_records:
+            record.cloud_notify_status = CloudNotifyStatus.FAILED.value
+            record.cloud_notify_error = "应用重启时发现云端通知未完成"
+
+        if uploading_records or notifying_records or pending_notify_records:
             await session.commit()
         if uploading_records:
             logger.warning(
@@ -604,6 +616,11 @@ async def _recover_interrupted_uploads(context: AppContext) -> None:
             logger.warning(
                 "启动恢复：将 {} 条残留 notifying 记录标记为 failed", len(notifying_records)
             )
+        if pending_notify_records:
+            logger.warning(
+                "启动恢复：将 {} 条残留 pending 云端通知记录标记为 failed",
+                len(pending_notify_records),
+            )
 
 
 async def _check_zmq_startup_health(context: AppContext) -> None:
@@ -612,8 +629,8 @@ async def _check_zmq_startup_health(context: AppContext) -> None:
         timeout=5.0
     )
     if not collection_ready:
-        logger.error("启动检查失败: robotos_collection 在 5 秒内未收到数据")
+        logger.error("启动检查失败: ontology_core.observation 在 5 秒内未收到数据")
 
     monitor_service = context.services.monitor_service
     if not monitor_service.is_cache_ready():
-        logger.error("启动检查失败: robotos_command monitor 命令未返回有效数据")
+        logger.error("启动检查失败: ontology_core.command monitor 命令未返回有效数据")

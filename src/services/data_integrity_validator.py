@@ -428,7 +428,7 @@ class DataIntegrityValidator:
         found_streams = self._collect_found_camera_streams(episode_stem, found_files)
         expected: set[str] = set()
         for comp in components:
-            if comp.connect_status != "connected":
+            if comp.connect_state != "connected":
                 continue
             try:
                 view_base = camera_component_to_view_base(comp.component_id)

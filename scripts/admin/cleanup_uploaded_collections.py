@@ -4,207 +4,21 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import shutil
 import sys
-from dataclasses import dataclass, field
-from datetime import timedelta
-from enum import Enum
 from pathlib import Path
 from typing import Sequence
 
 import src.core.logging as _logging_setup  # noqa: F401  触发日志 sink 注册
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import get_settings
-from src.core.path_validator import PathValidationError, validate_safe_path
-from src.models.database import CollectionRecord, init_database, now_shanghai
-from src.schemas.upload import UploadStatus
+from src.models.database import init_database
+from src.services.cleanup_service import (
+    CleanupItem,
+    CleanupResult,
+    CleanupService,
+)
 
 _ = _logging_setup  # 防止静态检查器误报未使用
-
-
-class CleanupBucket(str, Enum):
-    """清理计划分类。"""
-
-    ELIGIBLE = "eligible"
-    MISSING = "missing"
-    UNSAFE = "unsafe"
-    FAILED = "failed"
-    DELETED = "deleted"
-
-
-@dataclass(frozen=True)
-class CleanupItem:
-    """单条清理计划项。"""
-
-    record: CollectionRecord
-    bucket: CleanupBucket
-    path: Path | None
-    reason: str
-    size_bytes: int = 0
-    error: str | None = None
-
-
-@dataclass(frozen=True)
-class CleanupPlan:
-    """清理计划。"""
-
-    eligible: list[CleanupItem] = field(default_factory=list)
-    missing: list[CleanupItem] = field(default_factory=list)
-    unsafe: list[CleanupItem] = field(default_factory=list)
-
-    @property
-    def reclaimable_bytes(self) -> int:
-        return sum(item.size_bytes for item in self.eligible)
-
-
-@dataclass(frozen=True)
-class CleanupResult:
-    """执行结果。"""
-
-    plan: CleanupPlan
-    deleted: list[CleanupItem] = field(default_factory=list)
-    failed: list[CleanupItem] = field(default_factory=list)
-
-
-async def _load_candidate_records(
-    session_factory: async_sessionmaker[AsyncSession],
-    cutoff,
-    limit: int | None,
-) -> list[CollectionRecord]:
-    """加载数据库硬条件满足的清理候选记录。"""
-    async with session_factory() as db:
-        query = (
-            select(CollectionRecord)
-            .where(
-                CollectionRecord.end_time.is_not(None),
-                CollectionRecord.end_time < cutoff,
-                CollectionRecord.upload_status == UploadStatus.COMPLETED.value,
-                CollectionRecord.cloud_id.is_not(None),
-                CollectionRecord.output_dir.is_not(None),
-            )
-            .order_by(CollectionRecord.end_time.asc(), CollectionRecord.id.asc())
-        )
-        if limit is not None:
-            query = query.limit(limit)
-
-        result = await db.execute(query)
-        return list(result.scalars().all())
-
-
-def _build_cleanup_plan(records: Sequence[CollectionRecord], storage_root: Path) -> CleanupPlan:
-    """根据路径安全和文件存在性构建清理计划。"""
-    resolved_storage_root = storage_root.resolve()
-    eligible: list[CleanupItem] = []
-    missing: list[CleanupItem] = []
-    unsafe: list[CleanupItem] = []
-
-    for record in records:
-        item = _classify_record(record, resolved_storage_root)
-        if item.bucket == CleanupBucket.ELIGIBLE:
-            eligible.append(item)
-            continue
-        if item.bucket == CleanupBucket.MISSING:
-            missing.append(item)
-            continue
-        unsafe.append(item)
-
-    return CleanupPlan(eligible=eligible, missing=missing, unsafe=unsafe)
-
-
-def _classify_record(record: CollectionRecord, storage_root: Path) -> CleanupItem:
-    if not record.output_dir:
-        return CleanupItem(record, CleanupBucket.UNSAFE, None, "output_dir_empty")
-
-    try:
-        cleanup_path = validate_safe_path(record.output_dir, allowed_base=storage_root)
-    except PathValidationError as exc:
-        return CleanupItem(
-            record, CleanupBucket.UNSAFE, None, "path_outside_storage_root", error=str(exc)
-        )
-
-    if cleanup_path == storage_root:
-        return CleanupItem(record, CleanupBucket.UNSAFE, cleanup_path, "unsafe_storage_root")
-
-    try:
-        cleanup_path.relative_to(storage_root)
-    except ValueError as exc:
-        return CleanupItem(
-            record,
-            CleanupBucket.UNSAFE,
-            cleanup_path,
-            "path_outside_storage_root",
-            error=str(exc),
-        )
-
-    if not cleanup_path.exists():
-        return CleanupItem(record, CleanupBucket.MISSING, cleanup_path, "output_dir_not_found")
-    if not cleanup_path.is_dir():
-        return CleanupItem(record, CleanupBucket.UNSAFE, cleanup_path, "output_dir_not_directory")
-
-    return CleanupItem(
-        record,
-        CleanupBucket.ELIGIBLE,
-        cleanup_path,
-        "eligible",
-        size_bytes=_calculate_directory_size(cleanup_path),
-    )
-
-
-def _calculate_directory_size(path: Path) -> int:
-    """计算目录内普通文件大小总和。"""
-    total = 0
-    for child in path.rglob("*"):
-        if child.is_file():
-            total += child.stat().st_size
-    return total
-
-
-def _execute_cleanup(plan: CleanupPlan, *, execute: bool) -> CleanupResult:
-    """按计划执行清理；dry-run 时不删除。"""
-    if not execute:
-        return CleanupResult(plan=plan)
-
-    deleted: list[CleanupItem] = []
-    failed: list[CleanupItem] = []
-    for item in plan.eligible:
-        if item.path is None:
-            failed.append(
-                CleanupItem(
-                    item.record,
-                    CleanupBucket.FAILED,
-                    None,
-                    "path_missing",
-                    item.size_bytes,
-                )
-            )
-            continue
-        try:
-            shutil.rmtree(item.path)
-        except OSError as exc:
-            failed.append(
-                CleanupItem(
-                    item.record,
-                    CleanupBucket.FAILED,
-                    item.path,
-                    "delete_failed",
-                    item.size_bytes,
-                    error=str(exc),
-                )
-            )
-            continue
-        deleted.append(
-            CleanupItem(
-                item.record,
-                CleanupBucket.DELETED,
-                item.path,
-                "deleted",
-                item.size_bytes,
-            )
-        )
-
-    return CleanupResult(plan=plan, deleted=deleted, failed=failed)
 
 
 def _print_summary(result: CleanupResult, *, execute: bool, cutoff) -> None:
@@ -266,10 +80,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 async def _run(args: argparse.Namespace) -> int:
     settings = get_settings(env_name=args.env, robot_name=args.robot)
     session_factory = await init_database(settings.database)
-    cutoff = now_shanghai() - timedelta(days=args.older_than_days)
-    records = await _load_candidate_records(session_factory, cutoff, args.limit)
-    plan = _build_cleanup_plan(records, Path(settings.storage.base_path))
-    result = _execute_cleanup(plan, execute=args.execute)
+    async with session_factory() as db:
+        service = CleanupService(db=db, storage_root=Path(settings.storage.base_path))
+        cutoff, plan = await service.preview(args.older_than_days, args.limit)
+        result = service.execute_plan(plan, execute=args.execute)
     _print_summary(result, execute=args.execute, cutoff=cutoff)
     if args.execute and result.failed:
         return 3

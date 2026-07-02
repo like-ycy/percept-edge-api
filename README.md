@@ -215,7 +215,8 @@ base_url = "http://your-cloud-api"
 timeout = 30
 
 [zeromq]
-endpoint = "ipc:///tmp/robotos_collection"
+endpoint = "ipc:///tmp/ontology_core.observation"
+command_endpoint = "ipc:///tmp/ontology_core.command"
 
 [webrtc]
 stun_server = "stun:stun.l.google.com:19302"
@@ -283,7 +284,7 @@ runtime_health_interval = 300.0
 ```bash
 export CLOUD__BASE_URL="http://127.0.0.1:9000/api"
 export AUTH__ENABLED="false"
-export DESKTOP__RUNTIME__ROBOT_OS_CMD="/usr/local/bin/python3.10 /path/to/robot_os.pyz core --run-mode mode1"
+export DESKTOP__RUNTIME__ROBOT_OS_CMD="/usr/local/bin/python3.10 /path/to/robot_os.pyz runtime --mode homologous"
 ```
 
 推荐示例：
@@ -486,7 +487,7 @@ JSON 文件直接使用 contracts 中的 `Episode.model_dump(exclude_none=True)`
 video-only 模式约定：
 
 - ZeroMQ collection 帧只需要相机数据（如 `camera_wrist_left.data.color_data`），不要求 `joint_data`。
-- 开始采集时只检查 `robotos_collection` 是否有近期数据，跳过 `robotos_command` monitor 命令和任务设备类型校验。
+- 开始采集时只检查 `ontology_core.observation` 是否有近期数据，跳过 `ontology_core.command` monitor 命令和任务设备类型校验。
 - WebRTC 预览仍使用现有 latest-frame 链路推流视频。
 - 后台整理只写第一路 RGB 视频和一个 Episode JSON，最终目录只应保留一个 JSON 与一个 `*_rgb.mp4`；不会生成 depth mp4 或 `writer_frame_counts.snapshot`。
 - `.capture/manifest.json` 会记录 `capture_mode = "video_only"`，后台整理重试和校验都会按该模式处理。

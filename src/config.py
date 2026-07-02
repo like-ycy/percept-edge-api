@@ -180,10 +180,8 @@ class CloudSettings(BaseModel):
 class ZeromqSettings(BaseModel):
     """ZeroMQ 配置"""
 
-    endpoint: str = "ipc:///tmp/robotos_collection"
-    # deprecated: monitor 查询已迁移到 command_endpoint，保留仅兼容旧配置
-    rep_endpoint: str = "ipc:///tmp/robotos_monitor"
-    command_endpoint: str = "ipc:///tmp/robotos_command"
+    endpoint: str = "ipc:///tmp/ontology_core.observation"
+    command_endpoint: str = "ipc:///tmp/ontology_core.command"
     enable_runtime_watchdog: bool = True
     stale_threshold_seconds: float = Field(default=5.0, gt=0.0)
     watchdog_interval_seconds: float = Field(default=1.0, gt=0.0)
@@ -292,8 +290,8 @@ class DesktopRuntimeSettings(BaseModel):
     robot_os_cwd: str = "/home/ai/workspaces/percept-edge/ontology-core"
     robot_os_cmd: str = (
         "/usr/local/bin/python3.10 "
-        "/home/ai/workspaces/percept-edge/ontology-core/robot_os.pyz core "
-        "--run-mode mode1 --log-level INFO"
+        "/home/ai/workspaces/percept-edge/ontology-core/robot_os.pyz runtime "
+        "--mode homologous --log-level INFO"
     )
     api_cwd: str = ""
     api_cmd: str = "uv run main.py"

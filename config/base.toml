@@ -4,10 +4,8 @@ port = 8000
 debug = false
 
 [zeromq]
-endpoint = "ipc:///tmp/robotos_collection"
-# deprecated: monitor 查询已迁移到 command_endpoint，保留 rep_endpoint 仅兼容旧部署配置
-rep_endpoint = "ipc:///tmp/robotos_monitor"
-command_endpoint = "ipc:///tmp/robotos_command"
+endpoint = "ipc:///tmp/ontology_core.observation"
+command_endpoint = "ipc:///tmp/ontology_core.command"
 enable_runtime_watchdog = true
 stale_threshold_seconds = 5.0
 watchdog_interval_seconds = 1.0

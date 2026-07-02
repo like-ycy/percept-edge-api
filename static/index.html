@@ -26,6 +26,7 @@
         <nav class="topnav" aria-label="页面导航">
           <a class="active" href="index.html">入口</a>
           <a href="redesign-upload-reconcile.html" data-protected-link>补偿上传</a>
+          <a href="redesign-cleanup.html" data-protected-link>清理数据</a>
           <a href="redesign-collection.html" data-protected-link>数据采集</a>
           <a href="redesign-monitor.html" data-protected-link>系统监控</a>
           <a href="redesign-processes.html" data-protected-link>进程监控</a>
@@ -58,6 +59,15 @@
             <p>云端通知补偿 · 已上传记录登记修复。包含登录、确认项、补偿结果、运行日志、补偿范围与环境说明。</p>
           </span>
           <span class="page-card-footer"><span>进入</span><span>补偿</span></span>
+        </a>
+
+        <a class="page-card" href="redesign-cleanup.html" data-protected-link>
+          <span class="page-card-top">
+            <span class="badge danger">DELETE</span>
+            <span class="page-card-title">清理已上传数据</span>
+            <p>扫描并删除已上传云端且超过保留天数的本地采集目录。只删本地目录，不删数据库记录，支持 dry-run 预览和确认文本保护。</p>
+          </span>
+          <span class="page-card-footer"><span>进入</span><span>清理</span></span>
         </a>
 
         <a class="page-card" href="redesign-collection.html" data-protected-link>

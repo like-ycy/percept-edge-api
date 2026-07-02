@@ -5,9 +5,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import Settings
 from src.core.app_context import get_app_context
 from src.core.exceptions import BusinessError, ExternalServiceError, NotFoundError
 from src.dependencies import (
@@ -16,9 +17,17 @@ from src.dependencies import (
     get_current_user,
     get_database_storage_service,
     get_db,
+    get_settings,
 )
 from src.models.database import CollectionRecord
 from src.schemas.auth import UserInfo
+from src.schemas.cleanup import (
+    CleanupExecuteRequest,
+    CleanupExecuteResponse,
+    CleanupItemResponse,
+    CleanupPreviewResponse,
+    CleanupSummaryResponse,
+)
 from src.schemas.collection import RawCaptureInfo
 from src.schemas.query import StorageQueryParams
 from src.schemas.response import ResponseSchema
@@ -29,12 +38,101 @@ from src.schemas.storage import (
 )
 from src.schemas.upload import UploadStatus
 from src.schemas.validation import ValidationStatusEnum
+from src.services.cleanup_service import CleanupItem, CleanupPlan, CleanupResult, CleanupService
 from src.services.cloud_client import CloudClient
 from src.services.collection_service import CollectionService
 from src.services.raw_capture_inspector import inspect_raw_capture
 from src.services.storage_service import DatabaseStorageService
 
 router = APIRouter()
+
+
+# ── Cleanup helper converters ──────────────────────────────────────────
+
+
+def _cleanup_item_to_response(item: CleanupItem) -> CleanupItemResponse:
+    record = item.record
+    return CleanupItemResponse(
+        record_id=record.id,
+        bucket=item.bucket.value,
+        path=str(item.path) if item.path is not None else None,
+        reason=item.reason,
+        size_bytes=item.size_bytes,
+        error=item.error,
+        end_time=record.end_time,
+        output_dir=record.output_dir,
+        upload_status=record.upload_status,
+        cloud_id=record.cloud_id,
+        cloud_notified=record.cloud_id is not None,
+    )
+
+
+def _cleanup_summary(
+    plan: CleanupPlan, result: CleanupResult | None = None
+) -> CleanupSummaryResponse:
+    return CleanupSummaryResponse(
+        eligible_count=len(plan.eligible),
+        missing_count=len(plan.missing),
+        unsafe_count=len(plan.unsafe),
+        deleted_count=len(result.deleted) if result is not None else 0,
+        failed_count=len(result.failed) if result is not None else 0,
+        skipped_count=len(result.skipped_ids) if result is not None else 0,
+        reclaimable_bytes=plan.reclaimable_bytes,
+    )
+
+
+# ── Cleanup endpoints ──────────────────────────────────────────────────
+
+
+@router.get("/cleanup/preview", response_model=ResponseSchema[CleanupPreviewResponse])
+async def preview_cleanup(
+    older_than_days: int = Query(default=3, ge=1),
+    limit: int | None = Query(default=None, ge=1),
+    user: UserInfo = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """预览可清理的已上传且已通知云端本地目录。"""
+    _ = user
+    service = CleanupService(db=db, storage_root=Path(settings.storage.base_path))
+    cutoff, plan = await service.preview(older_than_days=older_than_days, limit=limit)
+    return ResponseSchema(
+        data=CleanupPreviewResponse(
+            cutoff=cutoff,
+            summary=_cleanup_summary(plan),
+            eligible=[_cleanup_item_to_response(item) for item in plan.eligible],
+            missing=[_cleanup_item_to_response(item) for item in plan.missing],
+            unsafe=[_cleanup_item_to_response(item) for item in plan.unsafe],
+        )
+    )
+
+
+@router.post("/cleanup/execute", response_model=ResponseSchema[CleanupExecuteResponse])
+async def execute_cleanup(
+    payload: CleanupExecuteRequest,
+    user: UserInfo = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """执行已上传且已通知云端本地目录清理；只删本地目录，不删数据库记录。"""
+    _ = user
+    service = CleanupService(db=db, storage_root=Path(settings.storage.base_path))
+    cutoff, result = await service.execute(
+        record_ids=payload.record_ids,
+        older_than_days=payload.older_than_days,
+        confirm_text=payload.confirm_text,
+    )
+    return ResponseSchema(
+        data=CleanupExecuteResponse(
+            cutoff=cutoff,
+            summary=_cleanup_summary(result.plan, result),
+            deleted=[_cleanup_item_to_response(item) for item in result.deleted],
+            failed=[_cleanup_item_to_response(item) for item in result.failed],
+            missing=[_cleanup_item_to_response(item) for item in result.plan.missing],
+            unsafe=[_cleanup_item_to_response(item) for item in result.plan.unsafe],
+            skipped_ids=result.skipped_ids,
+        )
+    )
 
 
 @router.get("/files", response_model=ResponseSchema[PaginatedCollectionRecordResponse])

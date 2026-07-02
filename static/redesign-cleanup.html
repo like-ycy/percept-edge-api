@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>清理已上传数据</title>
+  <link rel="stylesheet" href="assets/vercel-redesign.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="index.html">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><title>percept-static</title><path d="M4 4h16v16H4z"></path><path d="M8 8h8v8H8z"></path></svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-title">percept-static</span>
+            <span class="brand-subtitle">清理已上传数据</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="页面导航">
+          <a href="index.html">入口</a>
+          <a href="redesign-upload-reconcile.html">补偿上传</a>
+          <a class="active" href="redesign-cleanup.html">清理数据</a>
+          <a href="redesign-collection.html">数据采集</a>
+          <a href="redesign-monitor.html">系统监控</a>
+          <a href="redesign-processes.html">进程监控</a>
+          <a href="redesign-unlock.html">采集锁</a>
+          <a href="redesign-raw-info.html">原始数据</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container page">
+      <a class="backlink" href="index.html">← 返回入口</a>
+      <section class="hero">
+        <div class="hero-stack">
+          <div class="eyebrow">GET /api/storage/cleanup/preview · POST /api/storage/cleanup/execute</div>
+          <h1>清理已上传数据</h1>
+          <p class="lead">只删除已上传完成、已通知云端且超过保留天数的本地采集目录；数据库记录会保留。</p>
+        </div>
+        <div class="summary-strip">
+          <span class="badge danger">危险操作</span>
+          <div class="static-auth-status" data-static-auth-status></div>
+        </div>
+      </section>
+
+      <div class="layout">
+        <main class="stack">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>扫描条件</h2>
+              <span class="badge">dry-run first</span>
+            </div>
+            <div class="panel-body stack">
+              <div class="grid two">
+                <label class="field">
+                  <span>保留天数</span>
+                  <input id="olderThanDays" type="number" min="1" value="3">
+                </label>
+                <label class="field">
+                  <span>扫描上限</span>
+                  <input id="limit" type="number" min="1" placeholder="不填表示不限">
+                </label>
+              </div>
+              <div class="actions">
+                <button type="button" id="previewBtn" class="btn primary">扫描可清理数据</button>
+                <button type="button" id="clearBtn" class="btn">清空结果</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="summaryCard">
+            <div class="panel-header">
+              <h2>扫描结果</h2>
+              <span class="badge neutral" id="cutoffText">未扫描</span>
+            </div>
+            <div class="panel-body stack">
+              <div class="metric-grid">
+                <div class="metric"><div class="metric-label">可清理</div><div class="metric-value" id="eligibleCount">0</div><div class="metric-sub">eligible</div></div>
+                <div class="metric"><div class="metric-label">可释放</div><div class="metric-value" id="reclaimableSize">0 B</div><div class="metric-sub">bytes</div></div>
+                <div class="metric"><div class="metric-label">目录缺失</div><div class="metric-value" id="missingCount">0</div><div class="metric-sub">missing</div></div>
+                <div class="metric"><div class="metric-label">不安全</div><div class="metric-value" id="unsafeCount">0</div><div class="metric-sub">unsafe</div></div>
+              </div>
+              <div class="actions">
+                <button type="button" id="selectAllBtn" class="btn small">全选可清理</button>
+                <button type="button" id="executeBtn" class="btn danger" disabled>删除选中目录</button>
+              </div>
+              <div class="terminal log" id="items"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>运行日志</h2>
+            </div>
+            <div class="panel-body">
+              <div class="terminal log" id="log"></div>
+            </div>
+          </section>
+        </main>
+
+        <aside class="stack">
+          <section class="card">
+            <div class="card-title"><h2>清理硬条件</h2></div>
+            <ul class="list">
+              <li><code>end_time</code> 早于保留截止时间。</li>
+              <li><code>upload_status</code> 必须为 <code>completed</code>。</li>
+              <li><code>cloud_id</code> 必须非空，表示云端已确认。</li>
+              <li><code>output_dir</code> 必须非空且位于 storage root 内。</li>
+              <li>执行删除前后端会重新查库和重新校验路径。</li>
+              <li>只删除文件系统里的本地目录，不删除 <code>collection_records</code> 数据库记录。</li>
+            </ul>
+          </section>
+          <section class="card">
+            <div class="card-title"><h2>确认文本</h2></div>
+            <p class="muted">删除时必须输入：</p>
+            <pre>DELETE UPLOADED COLLECTIONS</pre>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script src="assets/static-auth.js"></script>
+  <script src="assets/redesign-cleanup.js"></script>
+</body>
+</html>

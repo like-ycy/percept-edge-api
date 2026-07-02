@@ -10,54 +10,40 @@ from desktop.adapters._common import get_config
 from desktop.adapters.base import Adapter, BuildContext, HealthProbe, ProcessSpec, ShutdownStep
 
 
-def _robot_os_run_mode(robot_name: str, launch_mode: str) -> Optional[str]:
-    if robot_name in {"robot-cr5", "robot-w1"}:
-        return None
-    if robot_name == "robot-cr1":
-        return "mode1"
+def _robot_os_mode(robot_name: str, launch_mode: str) -> Optional[str]:
+    if robot_name == "robot-w1":
+        return "vr"
+    if robot_name in {"robot-cr1", "robot-cr5"}:
+        return "homologous"
     if robot_name in {"robot-cr4a", "robot-cr4c"}:
-        return "mode2" if launch_mode == "vr" else "mode1"
-    return ""
+        return "vr" if launch_mode == "vr" else "homologous"
+    return None
 
 
-def _replace_run_mode(cmd: str, robot_name: str, launch_mode: str) -> str:
-    """根据 launch_mode 替换 robot_os_cmd 中的 --run-mode 值。
-
-    W1/CR5 不支持 run-mode，命令会移除此参数；CR1 强制 mode1；CR4A/CR4C
-    在 bilateral 下使用 mode1，在 vr 下使用 mode2。若 CR 系列命令遗漏该参数，则自动补齐。
-    """
+def _replace_mode(cmd: str, robot_name: str, launch_mode: str) -> str:
+    """根据 desktop launch_mode 替换 ontology-core runtime 的 --mode 值。"""
     tokens = shlex.split(cmd)
     if not tokens:
         return cmd
 
-    target_mode = _robot_os_run_mode(robot_name, launch_mode)
-    if target_mode == "":
+    target_mode = _robot_os_mode(robot_name, launch_mode)
+    if target_mode is None:
         return cmd
 
     normalized: list[str] = []
-    replaced = False
     skip_next = False
-
     for index, token in enumerate(tokens):
         if skip_next:
             skip_next = False
             continue
-        if token == "--run-mode":
-            if target_mode is not None and not replaced:
-                normalized.append(f"--run-mode={target_mode}")
-                replaced = True
+        if token == "--mode":
             skip_next = index + 1 < len(tokens)
             continue
-        if token.startswith("--run-mode="):
-            if target_mode is not None and not replaced:
-                normalized.append(f"--run-mode={target_mode}")
-                replaced = True
+        if token.startswith("--mode="):
             continue
         normalized.append(token)
 
-    if target_mode is not None and not replaced:
-        normalized.append(f"--run-mode={target_mode}")
-
+    normalized.append(f"--mode={target_mode}")
     return shlex.join(normalized)
 
 
@@ -91,7 +77,7 @@ class RobotOsAdapter(Adapter):
         if self._source_ros:
             setup = self._ros_setup_override or cfg.ros_setup_script
             source_prefix = f"[ -f '{setup}' ] && source '{setup}'; "
-        robot_cmd = _replace_run_mode(cfg.robot_os_cmd, cfg.robot_name, cfg.launch_mode)
+        robot_cmd = _replace_mode(cfg.robot_os_cmd, cfg.robot_name, cfg.launch_mode)
         return ProcessSpec(
             name=self.name,
             cmd=f"{source_prefix}exec {robot_cmd}",

@@ -54,12 +54,18 @@ class SystemInfo(BaseModel):
 
 
 class ComponentStatus(BaseModel):
-    """通用组件状态（相机和机械臂共用，可选字段区分）"""
+    """ontology-core runtime_monitor v2 组件状态。"""
 
     component_id: str
-    connect_status: str
-    hz: int
-    # 相机特有字段
+    enabled: bool
+    state: str
+    connect_state: str
+    role: str | None = None
+    hz: int = 0
+    last_frame_at_ms: int | None = None
+    frame_count: int | None = None
+    error_count: int | None = None
+    last_error: str | None = None
     width: int | None = None
     height: int | None = None
     jpeg_quality: int | None = None
@@ -67,7 +73,6 @@ class ComponentStatus(BaseModel):
     brand: str | None = None
     model: str | None = None
     detail: str | None = None
-    # 机械臂特有字段
     joint_data_dim: int | None = None
     eef_data_dim: int | None = None
     gripper_data_dim: int | None = None
@@ -77,8 +82,11 @@ class ComponentStatus(BaseModel):
 
 
 class RobotMetadataInfo(BaseModel):
-    """机器人元数据"""
+    """ontology-core runtime_monitor v2 机器人元数据。"""
 
+    robot_id: str
+    profile: str
+    runtime_kind: str
     robot_model: str
     robot_type: str
     robot_desc: list[str]

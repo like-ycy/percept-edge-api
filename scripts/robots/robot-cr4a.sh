@@ -23,7 +23,7 @@ DEFAULT_ROSCORE_CMD="roscore"
 DEFAULT_ROS_SLAVE_CMD="roslaunch arx_x5_controller open_remote_slave.launch"
 DEFAULT_ROS_MASTER_CMD="roslaunch arx_x5_controller open_remote_master.launch"
 DEFAULT_ROBOT_OS_CWD="/home/cr4a/workspaces/percept-edge/ontology-core"
-DEFAULT_ROBOT_OS_CMD="/usr/local/bin/python3.10 /home/cr4a/workspaces/percept-edge/ontology-core/robot_os.pyz core --run-mode mode1 --log-level INFO"
+DEFAULT_ROBOT_OS_CMD="/usr/local/bin/python3.10 /home/cr4a/workspaces/percept-edge/ontology-core/robot_os.pyz runtime --mode homologous --log-level INFO"
 DEFAULT_API_CMD="${UV_BIN} run main.py"
 DEFAULT_SUDO_PASSWORD="ai"
 API_STARTUP_TIMEOUT="${API_STARTUP_TIMEOUT:-15}"
@@ -263,11 +263,11 @@ require_roscore() {
 
 robot_os_run_mode_for_launch() {
   if [ "${SELECTED_MODE}" = "vr" ]; then
-    printf 'mode2'
+    printf 'vr'
     return 0
   fi
 
-  printf 'mode1'
+  printf 'homologous'
 }
 
 with_robot_os_run_mode() {
@@ -288,21 +288,21 @@ for index, token in enumerate(tokens):
     if skip_next:
         skip_next = False
         continue
-    if token == "--run-mode":
+    if token == "--mode":
         if not replaced:
-            normalized.append(f"--run-mode={run_mode}")
+            normalized.append(f"--mode={run_mode}")
             replaced = True
         skip_next = index + 1 < len(tokens)
         continue
-    if token.startswith("--run-mode="):
+    if token.startswith("--mode="):
         if not replaced:
-            normalized.append(f"--run-mode={run_mode}")
+            normalized.append(f"--mode={run_mode}")
             replaced = True
         continue
     normalized.append(token)
 
 if not replaced:
-    normalized.append(f"--run-mode={run_mode}")
+    normalized.append(f"--mode={run_mode}")
 
 print(shlex.join(normalized), end="")
 PY

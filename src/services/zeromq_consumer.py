@@ -97,21 +97,42 @@ def _parse_tool_io_data(value) -> int | None:
     return None
 
 
+def _require_dict(value: object, field_name: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be an object")
+    return value
+
+
+def _require_timestamp_ms(value: object, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"{field_name} must be a millisecond timestamp")
+    return float(value)
+
+
 def parse_zmq_message(
     raw_data: bytes,
     arm_frame_build_timing_handler: ArmFrameBuildTimingHandler | None = None,
 ) -> ZmqFrame:
-    """解析 msgpack 消息为 ZmqFrame"""
-    data = msgpack.unpackb(raw_data, raw=False)
+    """解析 ontology-core observation v2 msgpack 消息为 ZmqFrame。"""
+    data = _require_dict(msgpack.unpackb(raw_data, raw=False), "message")
+    if data.get("type") != "robot_observation" or data.get("version") != 2:
+        raise ValueError("ZeroMQ message must be robot_observation v2")
 
-    cameras = []
-    arms = []
-    extras = []
+    frame_timestamp_ms = _require_timestamp_ms(data.get("timestamp_ms"), "timestamp_ms")
+    components = _require_dict(data.get("components"), "components")
 
-    for frame in data["frames"]:
-        component_id = frame["component_id"]
-        frame_data = frame["data"]
-        timestamp = frame["timestamp"]
+    cameras: list[CameraFrame] = []
+    arms: list[ArmFrame] = []
+    extras: list[ExtraComponentFrame] = []
+
+    for component_id, raw_component in components.items():
+        if not isinstance(component_id, str):
+            raise ValueError("component_id must be a string")
+        component = _require_dict(raw_component, f"components.{component_id}")
+        frame_data = _require_dict(component.get("data"), f"components.{component_id}.data")
+        timestamp = _require_timestamp_ms(
+            component.get("timestamp_ms"), f"components.{component_id}.timestamp_ms"
+        )
 
         if "color_data" in frame_data or "depth_data" in frame_data:
             color_data = _parse_bytes_field(frame_data.get("color_data"))
@@ -124,10 +145,13 @@ def parse_zmq_message(
                     depth_data=depth_data,
                 )
             )
-        elif "joint_data" in frame_data:
-            joint = frame_data["joint_data"]
-            eef = frame_data.get("eef_data")
+            continue
 
+        if "joint_data" in frame_data:
+            joint = _require_dict(
+                frame_data["joint_data"], f"components.{component_id}.data.joint_data"
+            )
+            eef = frame_data.get("eef_data")
             arm_build_start_ns = time.perf_counter_ns()
             try:
                 arms.append(
@@ -153,17 +177,18 @@ def parse_zmq_message(
                         timestamp,
                         arm_build_elapsed_ns,
                     )
-        else:
-            extras.append(
-                ExtraComponentFrame(
-                    component_id=component_id,
-                    timestamp=timestamp,
-                    payload=frame_data,
-                )
+            continue
+
+        extras.append(
+            ExtraComponentFrame(
+                component_id=component_id,
+                timestamp=timestamp,
+                payload=frame_data,
             )
+        )
 
     return ZmqFrame(
-        timestamp=data["timestamp"],
+        timestamp=frame_timestamp_ms,
         cameras=cameras,
         arms=arms,
         extras=extras,
@@ -406,8 +431,8 @@ class ZeroMQConsumer:
         timing_handler = self._record_collection_arm_frame_build_time
         zmq_frame = parse_zmq_message(raw_data, timing_handler)
         self._latest_parse_time_ms = (time.perf_counter() - start_time) * 1000
-        current_ts = datetime.now(timezone.utc).timestamp()
-        self._latest_frame_delay_ms = (current_ts - zmq_frame.timestamp) * 1000
+        current_ts_ms = datetime.now(timezone.utc).timestamp() * 1000
+        self._latest_frame_delay_ms = current_ts_ms - zmq_frame.timestamp
         return zmq_frame
 
     def _reset_collection_arm_frame_build_stats(self) -> None:
@@ -470,7 +495,7 @@ class ZeroMQConsumer:
 
     def _extract_frame_metadata(self, frame: ZmqFrame) -> FrameMetadata:
         return FrameMetadata(
-            timestamp=datetime.fromtimestamp(frame.timestamp, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(frame.timestamp / 1000, tz=timezone.utc),
             has_image=len(frame.cameras) > 0,
             image_shape=None,
             image_dtype="jpeg",

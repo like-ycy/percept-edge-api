@@ -98,7 +98,7 @@ def _resolve_command_endpoint(environment: str, repo_root: Path, robot_name: str
     try:
         return _load_app_settings(environment, repo_root, robot_name).zeromq.command_endpoint
     except Exception:
-        fallback = "ipc:///tmp/robotos_command"
+        fallback = "ipc:///tmp/ontology_core.command"
         logger.warning(
             "无法从配置加载 command_endpoint (env=%s)，回退到默认值: %s",
             environment,

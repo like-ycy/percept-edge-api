@@ -92,7 +92,14 @@ def probe_monitor(command_endpoint: str, timeout: float) -> bool:
             return False
 
         data = payload.get("data")
-        return isinstance(data, dict) and bool(data) and "system" in data and "robot" in data
+        return (
+            isinstance(data, dict)
+            and data.get("type") == "runtime_monitor"
+            and data.get("version") == 2
+            and isinstance(data.get("system"), dict)
+            and isinstance(data.get("robot"), dict)
+            and isinstance(data.get("components"), dict)
+        )
     except Exception:
         return False
     finally:

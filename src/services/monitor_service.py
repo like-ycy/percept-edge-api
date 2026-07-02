@@ -90,6 +90,9 @@ class MonitorService:
         register_info = metadata_raw.get("robot_register_info")
 
         metadata = RobotMetadataInfo(
+            robot_id=metadata_raw.get("robot_id", ""),
+            profile=metadata_raw.get("profile", ""),
+            runtime_kind=metadata_raw.get("runtime_kind", ""),
             robot_model=metadata_raw.get("robot_model", ""),
             robot_type=metadata_raw.get("robot_type", ""),
             robot_desc=self._extract_robot_description_lines(metadata_raw),
@@ -103,8 +106,15 @@ class MonitorService:
             components.append(
                 ComponentStatus(
                     component_id=key,
-                    connect_status=value.get("connect_status", "unknown"),
+                    enabled=bool(value.get("enabled", False)),
+                    state=str(value.get("state", "unknown")),
+                    connect_state=str(value.get("connect_state", "unknown")),
+                    role=value.get("role") if isinstance(value.get("role"), str) else None,
                     hz=value.get("hz", 0),
+                    last_frame_at_ms=value.get("last_frame_at_ms"),
+                    frame_count=value.get("frame_count"),
+                    error_count=value.get("error_count"),
+                    last_error=value.get("last_error"),
                     width=value.get("width"),
                     height=value.get("height"),
                     jpeg_quality=value.get("jpeg_quality"),
@@ -184,6 +194,33 @@ class MonitorService:
                 break
             await self._refresh()
 
+    @staticmethod
+    def _normalize_monitor_v2(data: dict) -> tuple[dict, dict]:
+        if data.get("type") != "runtime_monitor" or data.get("version") != 2:
+            raise ValueError("monitor payload must be runtime_monitor v2")
+        system = data.get("system")
+        robot = data.get("robot")
+        components = data.get("components")
+        if (
+            not isinstance(system, dict)
+            or not isinstance(robot, dict)
+            or not isinstance(components, dict)
+        ):
+            raise ValueError("monitor payload missing system, robot, or components")
+
+        raw_metadata = robot.get("metadata")
+        metadata_raw: dict = raw_metadata if isinstance(raw_metadata, dict) else {}
+        robot_cache: dict = {
+            "metadata": {
+                "robot_id": robot.get("robot_id", ""),
+                "profile": robot.get("profile", ""),
+                "runtime_kind": robot.get("runtime_kind", ""),
+                **metadata_raw,
+            }
+        }
+        robot_cache.update(components)
+        return system, robot_cache
+
     async def _refresh(self) -> bool:
         """查询 monitor 并更新缓存"""
         try:
@@ -192,8 +229,7 @@ class MonitorService:
                 logger.warning("monitor 查询返回空数据")
                 return False
 
-            self._system_cache = data.get("system", {})
-            self._robot_cache = data.get("robot", {})
+            self._system_cache, self._robot_cache = self._normalize_monitor_v2(data)
             self._last_update = datetime.now(timezone.utc)
 
             logger.debug(

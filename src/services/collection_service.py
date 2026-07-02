@@ -249,21 +249,21 @@ class CollectionService:
         if not collection_ready:
             collection_ready = await self.consumer.wait_until_collection_ready(timeout=1.0)
         if not collection_ready:
-            logger.error("开始采集失败: robotos_collection 无可用数据")
-            raise BusinessError("无法获取采集数据，请检查 robotos_collection 数据流")
+            logger.error("开始采集失败: ontology_core.observation 无可用数据")
+            raise BusinessError("无法获取采集数据，请检查 ontology_core.observation 数据流")
 
         if self._video_only:
             return
 
         if self._monitor_service is None:
             logger.error("开始采集失败: MonitorService 未配置")
-            raise BusinessError("无法获取采集数据，请检查 robotos_command monitor 命令")
+            raise BusinessError("无法获取采集数据，请检查 ontology_core.command monitor 命令")
 
         system_info = self._monitor_service.get_system_info()
         robot_status = self._monitor_service.get_robot_status()
         if system_info is None or robot_status is None:
-            logger.error("开始采集失败: robotos_command monitor 命令无有效数据")
-            raise BusinessError("无法获取采集数据，请检查 robotos_command monitor 命令")
+            logger.error("开始采集失败: ontology_core.command monitor 命令无有效数据")
+            raise BusinessError("无法获取采集数据，请检查 ontology_core.command monitor 命令")
 
     async def stop_collection(self, db: AsyncSession) -> CollectionSession:
         if not self._collecting:

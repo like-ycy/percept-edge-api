@@ -107,8 +107,8 @@ let monitorGeneration = 0;
                 compCard.className = 'component-card';
 
                 let statusClass = 'status-unknown';
-                if (comp.connect_status === 'connected') statusClass = 'status-connected';
-                else if (comp.connect_status === 'disconnected') statusClass = 'status-disconnected';
+                if (comp.connect_state === 'connected') statusClass = 'status-connected';
+                else if (comp.connect_state === 'disconnected') statusClass = 'status-disconnected';
 
                 const header = document.createElement('div');
                 header.className = 'component-header';
@@ -118,7 +118,7 @@ let monitorGeneration = 0;
 
                 const status = document.createElement('span');
                 status.className = `status-badge ${statusClass}`;
-                status.textContent = comp.connect_status;
+                status.textContent = comp.connect_state;
 
                 header.append(componentId, status);
                 compCard.appendChild(header);

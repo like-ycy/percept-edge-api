@@ -247,20 +247,22 @@ class SequentialFlowRunner(QObject):
             return
         if expected_stop:
             return
-        self._spawned_names.discard(name)
         wait = self._wait
-        if wait is None:
-            # 非等待期：长驻进程意外退出
-            self._fail_running_process(name, f"{name} 意外退出，exit_code={exit_code}")
-            return
-        if wait.kind == "run_once_finish" and wait.name == name:
+        if wait is not None and wait.kind == "run_once_finish" and wait.name == name:
+            self._spawned_names.discard(name)
             step = self.steps[self._step_index]
             if exit_code == 0:
                 self._on_step_done(step, payload={"exit_code": exit_code})
             else:
                 self._fail(step, f"{name} 失败，exit_code={exit_code}")
             return
-        # 其他等待状态下的进程死亡 = 失败
+
+        if name in self._spawned_names:
+            # 非等待期或后续步骤等待期：长驻进程意外退出。
+            self._fail_running_process(name, f"{name} 意外退出，exit_code={exit_code}")
+            return
+
+        # 其他未跟踪进程死亡 = 当前步骤失败
         self._fail_unexpected_exit(name, exit_code)
 
     @Slot(str, str, bool)
@@ -371,6 +373,7 @@ class SequentialFlowRunner(QObject):
     def _fail_running_process(self, name: str, message: str) -> None:
         if name not in self._spawned_names:
             return
+        self._spawned_names.discard(name)
         self._cancel_waiters()
         self._emit(
             FlowEvent(
